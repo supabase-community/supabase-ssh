@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { Chalk } from 'chalk'
 import { Bash, defineCommand, MountableFs, OverlayFs } from 'just-bash'
 import ssh2, { type ServerChannel } from 'ssh2'
 
 // ssh2 is commonjs
 const { Server } = ssh2
+
+// Force truecolor - output goes to SSH channels, not stdout
+const chalk = new Chalk({ level: 3 })
+const green = chalk.rgb(62, 207, 142)
 
 const DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
 const PORT = parseInt(process.env.PORT ?? '22', 10)
@@ -20,17 +25,18 @@ const aliasCommands = [
   defineCommand('l', (args, ctx) => ctx.exec!(`ls -CF ${args.join(' ')}`, { cwd: ctx.cwd })),
 ]
 
-const BANNER =
-  '\r\n\x1b[38;2;62;207;142m' +
+const LOGO =
   '  ____                    _                    \r\n' +
   ' / ___| _   _ _ __   __ _| |__   __ _ ___  ___ \r\n' +
   " \\___ \\| | | | '_ \\ /  ` | '_ \\ / _` / __|/ _ \\\r\n" +
   '  ___) | |_| | |_) | (_| | |_) | (_| \\__ \\  __/\r\n' +
   ' |____/ \\__,_| .__/ \\__,_|_.__/ \\__,_|___/\\___|\r\n' +
-  '             |_|\x1b[0m\r\n' +
-  '\r\n' +
-  ' Tell your agent to run \x1b[2mssh supabase.sh <command>\x1b[0m to search the docs.\r\n' +
-  ' Or explore yourself with grep, find, cat, and tree.\r\n' +
+  '             |_|'
+
+const BANNER =
+  `\r\n${green(LOGO)}\r\n` +
+  `\r\n Tell your agent to run ${chalk.dim('ssh supabase.sh <command>')} to search the docs.\r\n` +
+  ' Or explore them yourself with grep, find, cat, and tree.\r\n' +
   '\r\n' +
   '$ '
 
@@ -119,7 +125,7 @@ async function main() {
       console.log('Client idle timeout, disconnecting')
       if (activeChannel) {
         activeChannel.write(
-          '\r\n\r\n\x1b[38;2;62;207;142mSession timed out. Thanks for stopping by!\x1b[0m\r\n\r\n'
+          `\r\n\r\n${green('Session timed out. Thanks for stopping by!')}\r\n\r\n`
         )
       }
       setTimeout(() => client.end(), 500)
@@ -179,7 +185,7 @@ async function main() {
                 const command = buf.trim()
                 buf = ''
                 if (command === 'exit') {
-                  channel.write('\x1b[38;2;62;207;142m~ Thanks for stopping by! ~\x1b[0m\r\n')
+                  channel.write(`\r\n${green('Thanks for stopping by!')}\r\n\r\n`)
                   channel.end()
                   return
                 }
@@ -232,7 +238,7 @@ function gracefulShutdown(signal: string) {
   console.log(`${signal} received, notifying ${activeChannels.size} active session(s)`)
   for (const channel of activeChannels) {
     channel.write(
-      '\r\n\r\n\x1b[38;2;62;207;142mQuick update in progress - reconnect in a few seconds!\x1b[0m\r\n\r\n'
+      `\r\n\r\n${green('Quick update in progress - reconnect in a few seconds!')}\r\n\r\n`
     )
     channel.end()
   }

@@ -12,6 +12,7 @@
     "deploy:staging": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh-staging"
   },
   "dependencies": {
+    "chalk": "^5.4.1",
     "just-bash": "^2.11.15",
     "ssh2": "^1.16.0"
   },
