@@ -1,0 +1,37 @@
+app = "supabase-ssh"
+primary_region = "iad"
+
+# Deploy from apps/ssh/:
+#   pnpm run deploy:prod
+#   pnpm run deploy:staging
+#
+# First-time setup (repeat for each app/env):
+#   fly apps create <app> --org <org>   (org only needed at creation)
+#   fly ips allocate-v4 --app <app>     (port 22 needs a dedicated IPv4)
+#   fly secrets set SSH_HOST_KEY="$(pnpm run --silent generate:host-key)" --app <app>
+#
+#   The host key is the only durable state. fly secrets list won't show the
+#   value, but you can always recover it while a machine is running:
+#     fly ssh console -C "printenv SSH_HOST_KEY" --app <app>
+
+[deploy]
+strategy = "immediate"
+
+[build]
+dockerfile = "Dockerfile"
+
+[[vm]]
+memory = "256mb"
+cpu_kind = "shared"
+cpus = 1
+
+[[services]]
+protocol = "tcp"
+internal_port = 22
+# Scales to zero between connections - SSH clients may see a ~5s cold start delay
+auto_stop_machines = true
+auto_start_machines = true
+min_machines_running = 0
+
+[[services.ports]]
+port = 22

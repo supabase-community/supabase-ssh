@@ -1,0 +1,13 @@
+# Build context is repo root - ignore everything, then allow what we need.
+*
+
+# Root workspace files (for pnpm install --filter)
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+
+# This package
+!apps/ssh/
+
+# Pre-built docs markdown
+!apps/docs/public/docs/guides/

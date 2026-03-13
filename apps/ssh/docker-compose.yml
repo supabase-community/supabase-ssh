@@ -1,0 +1,11 @@
+services:
+  docs-ssh:
+    build:
+      context: ../..
+      dockerfile: apps/ssh/Dockerfile
+    ports:
+      - "22:22"
+    volumes:
+      - ./keys:/app/keys
+    environment:
+      SSH_HOST_KEY_PATH: /app/keys/host_key
