@@ -16,18 +16,20 @@ primary_region = "iad"
 
 [deploy]
 strategy = "immediate"
+kill_timeout = "5s"
 
 [build]
 dockerfile = "Dockerfile"
 
 [[vm]]
-memory = "256mb"
+memory = "512mb"
 cpu_kind = "shared"
 cpus = 1
 
 [[services]]
 protocol = "tcp"
 internal_port = 22
+soft_limit = 80
 # Scales to zero between connections - SSH clients may see a ~5s cold start delay
 auto_stop_machines = true
 auto_start_machines = true

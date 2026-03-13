@@ -2,13 +2,15 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { Bash, defineCommand, MountableFs, OverlayFs } from 'just-bash'
-import ssh2 from 'ssh2'
+import ssh2, { type ServerChannel } from 'ssh2'
 
 // ssh2 is commonjs
 const { Server } = ssh2
 
 const DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
 const PORT = parseInt(process.env.PORT ?? '22', 10)
+const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS ?? '30000', 10)
+const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
 
 // Aliases as custom commands so just-bash handles piping/redirection correctly.
 // e.g. `ll | grep foo` works because just-bash resolves `ll` before building the pipe.
@@ -28,7 +30,7 @@ const BANNER =
   '             |_|\x1b[0m\r\n' +
   '\r\n' +
   ' Tell your agent to run \x1b[2mssh supabase.sh <command>\x1b[0m to search the docs.\r\n' +
-  ' Or explore interactively with grep, find, cat, and tree.\r\n' +
+  ' Or explore yourself with grep, find, cat, and tree.\r\n' +
   '\r\n' +
   '$ '
 
@@ -37,7 +39,7 @@ function createVfs() {
     mounts: [
       {
         mountPoint: '/supabase/docs',
-        filesystem: new OverlayFs({ root: DOCS_DIR, readOnly: true }),
+        filesystem: new OverlayFs({ root: DOCS_DIR, mountPoint: '/', readOnly: true }),
       },
     ],
   })
@@ -68,11 +70,63 @@ function makeBash() {
   })
 }
 
+/** All channels with an interactive shell - used for graceful shutdown messages. */
+const activeChannels = new Set<ServerChannel>()
+
+let totalConnections = 0
+let activeConnections = 0
+
+const RSS_LIMIT = 512 * 1024 * 1024 // match fly.toml [[vm]] memory
+const MEMORY_WARN_THRESHOLD = 0.85
+
+function logStats(event: string) {
+  const mem = process.memoryUsage()
+  console.log(
+    `[stats] ${event} | active=${activeConnections} total=${totalConnections}` +
+      ` | rss=${mb(mem.rss)}/${mb(RSS_LIMIT)} heap=${mb(mem.heapUsed)} external=${mb(mem.external)}`
+  )
+  if (mem.rss / RSS_LIMIT > MEMORY_WARN_THRESHOLD) {
+    console.warn(
+      `[oom-warning] rss at ${((mem.rss / RSS_LIMIT) * 100).toFixed(0)}% ` +
+        `(${mb(mem.rss)}/${mb(RSS_LIMIT)}) - active=${activeConnections}`
+    )
+  }
+}
+
+function mb(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+}
+
 async function main() {
   const hostKey = await loadHostKey()
 
+  logStats('startup')
+
   const server = new Server({ hostKeys: [hostKey] }, (client) => {
-    console.log('Client connected')
+    totalConnections++
+    activeConnections++
+    logStats('connect')
+
+    if (activeConnections > MAX_CONNECTIONS) {
+      console.log(`Rejecting connection: ${activeConnections}/${MAX_CONNECTIONS}`)
+      activeConnections--
+      client.end()
+      return
+    }
+
+    let activeChannel: ServerChannel | null = null
+    const idleTimer = setTimeout(() => {
+      console.log('Client idle timeout, disconnecting')
+      if (activeChannel) {
+        activeChannel.write(
+          '\r\n\r\n\x1b[38;2;62;207;142mSession timed out. Thanks for stopping by!\x1b[0m\r\n\r\n'
+        )
+      }
+      setTimeout(() => client.end(), 500)
+    }, IDLE_TIMEOUT_MS)
+    const resetIdle = () => {
+      idleTimer.refresh()
+    }
 
     // Accept all auth unconditionally - shell is sandboxed to just-bash
     client.on('authentication', (ctx) => ctx.accept())
@@ -85,6 +139,7 @@ async function main() {
         session.on('pty', (accept) => accept())
 
         session.on('exec', async (accept, _reject, info) => {
+          resetIdle()
           const channel = accept()
           const command = info.command
           console.log(`exec: ${command}`)
@@ -105,6 +160,9 @@ async function main() {
 
         session.on('shell', async (accept) => {
           const channel = accept()
+          activeChannel = channel
+          activeChannels.add(channel)
+          channel.on('close', () => activeChannels.delete(channel))
           const bash = makeBash()
 
           channel.write(BANNER)
@@ -113,6 +171,7 @@ async function main() {
 
           // Poor man's interactive shell
           channel.on('data', async (data: Buffer) => {
+            resetIdle()
             const chunk = data.toString()
             for (const ch of chunk) {
               if (ch === '\r' || ch === '\n') {
@@ -120,6 +179,7 @@ async function main() {
                 const command = buf.trim()
                 buf = ''
                 if (command === 'exit') {
+                  channel.write('\x1b[38;2;62;207;142m~ Thanks for stopping by! ~\x1b[0m\r\n')
                   channel.end()
                   return
                 }
@@ -149,7 +209,11 @@ async function main() {
       })
     })
 
-    client.on('end', () => console.log('Client disconnected'))
+    client.on('end', () => {
+      clearTimeout(idleTimer)
+      activeConnections--
+      logStats('disconnect')
+    })
     client.on('error', (err) => console.error('Client error:', err.message))
   })
 
@@ -164,11 +228,17 @@ main().catch((err) => {
   process.exit(1)
 })
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM')
-  process.exit(0)
-})
-process.on('SIGINT', () => {
-  console.log('SIGINT')
-  process.exit(0)
-})
+function gracefulShutdown(signal: string) {
+  console.log(`${signal} received, notifying ${activeChannels.size} active session(s)`)
+  for (const channel of activeChannels) {
+    channel.write(
+      '\r\n\r\n\x1b[38;2;62;207;142mQuick update in progress - reconnect in a few seconds!\x1b[0m\r\n\r\n'
+    )
+    channel.end()
+  }
+  // Give channels a moment to flush before exiting
+  setTimeout(() => process.exit(0), 500)
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
