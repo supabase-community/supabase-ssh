@@ -188,8 +188,11 @@ async function main() {
       client.on('session', (accept) => {
         const session = accept()
 
-        // No PTY support yet - just accept and ignore requests
-        session.on('pty', (accept) => accept())
+        let hasPty = false
+        session.on('pty', (accept) => {
+          hasPty = true
+          accept()
+        })
 
         session.on('exec', async (accept, _reject, info) => {
           resetIdle()
@@ -231,7 +234,7 @@ async function main() {
             input: channel,
             output: channel,
             prompt: getPrompt(),
-            terminal: true,
+            terminal: hasPty,
             completer: (line: string, cb: (err: null, result: [string[], string]) => void) => {
               completeForBash(bash, line, cwd)
                 .then((result) => cb(null, result))
