@@ -155,7 +155,21 @@ async function main() {
 
   logStats('startup')
 
-  const server = new Server({ hostKeys: [hostKey] }, (client) => {
+  const server = new Server(
+    {
+      hostKeys: [hostKey],
+      algorithms: {
+        kex: [
+          'curve25519-sha256',
+          'curve25519-sha256@libssh.org',
+          'ecdh-sha2-nistp256',
+          'ecdh-sha2-nistp384',
+          'ecdh-sha2-nistp521',
+          'diffie-hellman-group14-sha256',
+        ],
+      },
+    },
+    (client) => {
     totalConnections++
     activeConnections++
     logStats('connect')
