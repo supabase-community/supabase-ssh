@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { posix, resolve } from 'node:path'
+import { createInterface } from 'node:readline'
 import { Chalk } from 'chalk'
-import { Bash, defineCommand, MountableFs, OverlayFs } from 'just-bash'
+import { Bash, defineCommand, getCommandNames, MountableFs, OverlayFs } from 'just-bash'
 import ssh2, { type ServerChannel } from 'ssh2'
 
 // ssh2 is commonjs
@@ -36,20 +37,7 @@ const LOGO =
 const BANNER =
   `\r\n${green(LOGO)}\r\n` +
   `\r\n Tell your agent to run ${chalk.dim('ssh supabase.sh <command>')} to search the docs.\r\n` +
-  ' Or explore them yourself with grep, find, cat, and tree.\r\n' +
-  '\r\n' +
-  '$ '
-
-function createVfs() {
-  return new MountableFs({
-    mounts: [
-      {
-        mountPoint: '/supabase/docs',
-        filesystem: new OverlayFs({ root: DOCS_DIR, mountPoint: '/', readOnly: true }),
-      },
-    ],
-  })
-}
+  ' Or explore them yourself with grep, find, cat, and tree.\r\n\r\n'
 
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
@@ -70,8 +58,15 @@ async function loadHostKey(): Promise<Buffer> {
 
 function makeBash() {
   return new Bash({
-    fs: createVfs(),
-    cwd: '/supabase/docs/guides',
+    fs: new MountableFs({
+      mounts: [
+        {
+          mountPoint: '/supabase/docs',
+          filesystem: new OverlayFs({ root: DOCS_DIR, mountPoint: '/', readOnly: true }),
+        },
+      ],
+    }),
+    cwd: '/supabase',
     customCommands: aliasCommands,
   })
 }
@@ -101,6 +96,58 @@ function logStats(event: string) {
 
 function mb(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+}
+
+/** All known command names for tab completion. */
+const COMMAND_NAMES = [...getCommandNames(), ...aliasCommands.map((c) => c.name), 'exit']
+
+type CompletionResult = [string[], string]
+
+/** Tab-completion wired to just-bash's VFS and command list. */
+async function completeForBash(bash: Bash, line: string, cwd: string): Promise<CompletionResult> {
+  const trimmed = line.trimStart()
+  const parts = trimmed.split(/\s+/)
+
+  // Completing the command name (first word, no spaces yet)
+  if (parts.length <= 1) {
+    const partial = parts[0] ?? ''
+    const hits = COMMAND_NAMES.filter((c) => c.startsWith(partial))
+    return [hits.length === 1 ? [hits[0] + ' '] : hits, partial]
+  }
+
+  // Completing a file/directory argument
+  const partial = parts[parts.length - 1] ?? ''
+
+  // Split into directory prefix and name prefix
+  const lastSlash = partial.lastIndexOf('/')
+  const dirPart = lastSlash >= 0 ? partial.slice(0, lastSlash + 1) : ''
+  const namePart = lastSlash >= 0 ? partial.slice(lastSlash + 1) : partial
+
+  // Resolve the directory to list
+  const searchDir = dirPart ? posix.resolve(cwd, dirPart) : cwd
+
+  try {
+    const entries = await bash.fs.readdir(searchDir)
+    const matches = entries.filter((e) => e.startsWith(namePart)).map((e) => dirPart + e)
+
+    // Append / for directories (keep tabbing in), space for files (ready for next arg)
+    const decorated = await Promise.all(
+      matches.map(async (match) => {
+        try {
+          const fullPath = posix.resolve(cwd, match)
+          const stat = await bash.fs.stat(fullPath)
+          if (stat.isDirectory) return match + '/'
+          return matches.length === 1 ? match + ' ' : match
+        } catch {
+          return match
+        }
+      })
+    )
+
+    return [decorated, partial]
+  } catch {
+    return [[], partial]
+  }
 }
 
 async function main() {
@@ -173,43 +220,58 @@ async function main() {
 
           channel.write(BANNER)
 
-          let buf = ''
+          // Reset idle on any keystroke
+          channel.on('data', () => resetIdle())
 
-          // Poor man's interactive shell
-          channel.on('data', async (data: Buffer) => {
-            resetIdle()
-            const chunk = data.toString()
-            for (const ch of chunk) {
-              if (ch === '\r' || ch === '\n') {
-                channel.write('\r\n')
-                const command = buf.trim()
-                buf = ''
-                if (command === 'exit') {
-                  channel.write(`\r\n${green('Thanks for stopping by!')}\r\n\r\n`)
-                  channel.end()
-                  return
-                }
-                if (command) {
-                  try {
-                    const result = await bash.exec(command)
-                    if (result.stdout) channel.write(result.stdout.replace(/\n/g, '\r\n'))
-                    if (result.stderr) channel.write(result.stderr.replace(/\n/g, '\r\n'))
-                  } catch (err) {
-                    channel.write(`Error: ${err instanceof Error ? err.message : String(err)}\r\n`)
-                  }
-                }
-                channel.write('$ ')
-              } else if (ch === '\x7f' || ch === '\b') {
-                // backspace
-                if (buf.length > 0) {
-                  buf = buf.slice(0, -1)
-                  channel.write('\b \b')
-                }
-              } else {
-                buf += ch
-                channel.write(ch)
+          // Track cwd across exec calls (exec is isolated per call)
+          let cwd = bash.getCwd()
+          const getPrompt = () => `${green(posix.basename(cwd))} $ `
+
+          const rl = createInterface({
+            input: channel,
+            output: channel,
+            prompt: getPrompt(),
+            terminal: true,
+            completer: (line: string, cb: (err: null, result: [string[], string]) => void) => {
+              completeForBash(bash, line, cwd)
+                .then((result) => cb(null, result))
+                .catch(() => cb(null, [[], line]))
+            },
+          })
+
+          rl.prompt()
+
+          rl.on('line', async (line) => {
+            const command = line.trim()
+            if (command === 'exit') {
+              channel.write(`\r\n${green('Thanks for stopping by!')}\r\n\r\n`)
+              rl.close()
+              channel.end()
+              return
+            }
+            if (command) {
+              try {
+                const result = await bash.exec(command, { cwd })
+                if (result.stdout) channel.write(result.stdout.replace(/\n/g, '\r\n'))
+                if (result.stderr) channel.write(result.stderr.replace(/\n/g, '\r\n'))
+                // Persist cwd changes across isolated exec() calls
+                if (result.env.PWD) cwd = result.env.PWD
+              } catch (err) {
+                channel.write(`Error: ${err instanceof Error ? err.message : String(err)}\r\n`)
               }
             }
+            rl.setPrompt(getPrompt())
+            rl.prompt()
+          })
+
+          rl.on('close', () => {
+            channel.end()
+          })
+
+          // Handle SIGINT (Ctrl+C) - clear line, show new prompt
+          rl.on('SIGINT', () => {
+            channel.write('^C\r\n')
+            rl.prompt()
           })
         })
       })
