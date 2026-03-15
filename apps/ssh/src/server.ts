@@ -18,6 +18,7 @@ const DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
 const PORT = parseInt(process.env.PORT ?? '22', 10)
 const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS ?? '30000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
+const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
 
 // Aliases as custom commands so just-bash handles piping/redirection correctly.
 // e.g. `ll | grep foo` works because just-bash resolves `ll` before building the pipe.
@@ -93,6 +94,20 @@ function makeBash() {
     }),
     cwd: '/supabase',
     customCommands: aliasCommands,
+    defenseInDepth: true,
+    executionLimits: {
+      maxCommandCount: 1000,
+      maxLoopIterations: 1000,
+      maxAwkIterations: 1000,
+      maxSedIterations: 1000,
+      maxJqIterations: 1000,
+      maxGlobOperations: 10000,
+      maxArrayElements: 10000,
+      maxBraceExpansionResults: 1000,
+      maxOutputSize: 1024 * 1024, // 1MB
+      maxStringLength: 1024 * 1024, // 1MB
+      maxHeredocSize: 1024 * 1024, // 1MB
+    },
   })
 }
 
@@ -189,7 +204,7 @@ async function main() {
 
             try {
               const bash = makeBash()
-              const result = await bash.exec(command)
+              const result = await bash.exec(command, { signal: AbortSignal.timeout(EXEC_TIMEOUT) })
               if (result.stdout) channel.write(result.stdout)
               if (result.stderr) channel.stderr.write(result.stderr)
               channel.exit(result.exitCode)
@@ -216,6 +231,7 @@ async function main() {
               input: channel,
               output: channel,
               terminal: hasPty,
+              execTimeout: EXEC_TIMEOUT,
               banner: BANNER,
               prompt: (cwd) => `${green(posix.basename(cwd))} $ `,
               onLine: (command) => {

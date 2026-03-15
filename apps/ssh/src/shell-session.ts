@@ -23,6 +23,8 @@ export interface ShellSessionOptions {
   onExit?: () => void
   /** Called on each line before execution. Return false to skip exec (e.g. for 'exit' handling). */
   onLine?: (command: string) => boolean | void
+  /** Per-command execution timeout in ms. When set, each exec gets an AbortSignal. */
+  execTimeout?: number
 }
 
 /** Interactive shell session - REPL loop with readline, cwd tracking, and tab completion. */
@@ -35,6 +37,7 @@ export class ShellSession {
   #onExit?: () => void
   #onLine?: (command: string) => boolean | void
   #output: Writable
+  #execTimeout?: number
 
   constructor(opts: ShellSessionOptions) {
     this.#bash = opts.bash
@@ -44,6 +47,7 @@ export class ShellSession {
     this.#onExit = opts.onExit
     this.#onLine = opts.onLine
     this.#output = opts.output
+    this.#execTimeout = opts.execTimeout
 
     this.#rl = createInterface({
       input: opts.input,
@@ -82,7 +86,10 @@ export class ShellSession {
 
     if (command) {
       try {
-        const result = await this.#bash.exec(command, { cwd: this.#cwd })
+        const signal = this.#execTimeout
+          ? AbortSignal.timeout(this.#execTimeout)
+          : undefined
+        const result = await this.#bash.exec(command, { cwd: this.#cwd, signal })
         if (result.stdout) this.#output.write(result.stdout.replace(/\n/g, '\r\n'))
         if (result.stderr) this.#output.write(result.stderr.replace(/\n/g, '\r\n'))
         if (result.env.PWD) this.#cwd = result.env.PWD
