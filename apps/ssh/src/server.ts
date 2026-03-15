@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { posix, resolve } from 'node:path'
 import { Chalk } from 'chalk'
-import { Bash, defineCommand, InMemoryFs, MountableFs, OverlayFs } from 'just-bash'
 import ssh2, { type ServerChannel } from 'ssh2'
 
+import { createBash } from './bash.js'
 import { ShellSession } from './shell-session.js'
 
 // ssh2 is commonjs
@@ -14,19 +14,10 @@ const { Server } = ssh2
 const chalk = new Chalk({ level: 3 })
 const green = chalk.rgb(62, 207, 142)
 
-const DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
 const PORT = parseInt(process.env.PORT ?? '22', 10)
 const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS ?? '30000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
-
-// Aliases as custom commands so just-bash handles piping/redirection correctly.
-// e.g. `ll | grep foo` works because just-bash resolves `ll` before building the pipe.
-const aliasCommands = [
-  defineCommand('ll', (args, ctx) => ctx.exec!(`ls -alF ${args.join(' ')}`, { cwd: ctx.cwd })),
-  defineCommand('la', (args, ctx) => ctx.exec!(`ls -a ${args.join(' ')}`, { cwd: ctx.cwd })),
-  defineCommand('l', (args, ctx) => ctx.exec!(`ls -CF ${args.join(' ')}`, { cwd: ctx.cwd })),
-]
 
 const LOGO =
   '  ____                    _                    \r\n' +
@@ -56,59 +47,6 @@ async function loadHostKey(): Promise<Buffer> {
   const fingerprint = createHash('sha256').update(pem).digest('base64')
   console.log(`Loaded host key from ${SSH_HOST_KEY_PATH} (SHA256:${fingerprint})`)
   return pem
-}
-
-/**
- * MountableFs doesn't proxy sync methods to its base fs, so just-bash's
- * initFilesystem skips creating /bin, /tmp, /dev, etc. and registerCommand
- * can't write command stubs. This subclass exposes the base InMemoryFs's
- * sync methods so the full Unix directory structure is initialized.
- */
-class SyncMountableFs extends MountableFs {
-  #base: InMemoryFs
-
-  constructor(opts?: Omit<ConstructorParameters<typeof MountableFs>[0], 'base'>) {
-    const base = new InMemoryFs()
-    super({ ...opts, base })
-    this.#base = base
-  }
-
-  mkdirSync(path: string, options?: { recursive?: boolean }) {
-    return this.#base.mkdirSync(path, options)
-  }
-
-  writeFileSync(path: string, content: string | Uint8Array) {
-    return this.#base.writeFileSync(path, content)
-  }
-}
-
-function makeBash() {
-  return new Bash({
-    fs: new SyncMountableFs({
-      mounts: [
-        {
-          mountPoint: '/supabase/docs',
-          filesystem: new OverlayFs({ root: DOCS_DIR, mountPoint: '/', readOnly: true }),
-        },
-      ],
-    }),
-    cwd: '/supabase',
-    customCommands: aliasCommands,
-    defenseInDepth: true,
-    executionLimits: {
-      maxCommandCount: 1000,
-      maxLoopIterations: 1000,
-      maxAwkIterations: 1000,
-      maxSedIterations: 1000,
-      maxJqIterations: 1000,
-      maxGlobOperations: 10000,
-      maxArrayElements: 10000,
-      maxBraceExpansionResults: 1000,
-      maxOutputSize: 1024 * 1024, // 1MB
-      maxStringLength: 1024 * 1024, // 1MB
-      maxHeredocSize: 1024 * 1024, // 1MB
-    },
-  })
 }
 
 /** All channels with an interactive shell - used for graceful shutdown messages. */
@@ -203,7 +141,7 @@ async function main() {
             console.log(`exec: ${command}`)
 
             try {
-              const bash = makeBash()
+              const bash = createBash()
               const result = await bash.exec(command, { signal: AbortSignal.timeout(EXEC_TIMEOUT) })
               if (result.stdout) channel.write(result.stdout)
               if (result.stderr) channel.stderr.write(result.stderr)
@@ -225,7 +163,7 @@ async function main() {
             // Reset idle on any keystroke
             channel.on('data', () => resetIdle())
 
-            const bash = makeBash()
+            const bash = createBash()
             const shell = new ShellSession({
               bash,
               input: channel,
@@ -258,7 +196,7 @@ async function main() {
   )
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Docs SSH server listening on port ${PORT}`)
+    console.log(`SSH server listening on port ${PORT}`)
     console.log(`Connect: ssh localhost`)
   })
 }
