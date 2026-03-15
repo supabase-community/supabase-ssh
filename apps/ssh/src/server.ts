@@ -211,7 +211,7 @@ async function main() {
             channel.on('data', () => resetIdle())
 
             const bash = makeBash()
-            const shell = await ShellSession.create({
+            const shell = new ShellSession({
               bash,
               input: channel,
               output: channel,

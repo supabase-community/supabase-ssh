@@ -1,17 +1,12 @@
-import { posix } from 'node:path'
 import { createInterface, type Interface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import type { Bash } from 'just-bash'
+import { createCompletionEngine, type CompletionEngine } from './completion.js'
+import type { CommandCompleteFn } from './completion.js'
+
+export type { CommandCompleteFn } from './completion.js'
 
 type CompletionResult = [string[], string]
-
-/** Per-command argument completion hook. Return completions, or empty to fall back to file completion. */
-export type CommandCompleteFn = (ctx: {
-  command: string
-  args: string[]
-  word: string
-  cwd: string
-}) => Promise<string[]>
 
 export interface ShellSessionOptions {
   bash: Bash
@@ -35,19 +30,17 @@ export class ShellSession {
   #rl: Interface
   #cwd: string
   #bash: Bash
-  #commands: string[]
+  #completion: CompletionEngine
   #promptFn: (cwd: string) => string
-  #completeFn?: CommandCompleteFn
   #onExit?: () => void
   #onLine?: (command: string) => boolean | void
   #output: Writable
 
-  private constructor(opts: ShellSessionOptions, commands: string[]) {
+  constructor(opts: ShellSessionOptions) {
     this.#bash = opts.bash
     this.#cwd = opts.bash.getCwd()
-    this.#commands = commands
     this.#promptFn = opts.prompt
-    this.#completeFn = opts.complete
+    this.#completion = createCompletionEngine(opts.bash, opts.complete)
     this.#onExit = opts.onExit
     this.#onLine = opts.onLine
     this.#output = opts.output
@@ -58,8 +51,9 @@ export class ShellSession {
       prompt: opts.prompt(this.#cwd),
       terminal: opts.terminal,
       completer: (line: string, cb: (err: null, result: CompletionResult) => void) => {
-        this.#complete(line)
-          .then((result) => cb(null, result))
+        this.#completion
+          .complete(line, this.#cwd)
+          .then((r) => cb(null, r))
           .catch(() => cb(null, [[], line]))
       },
     })
@@ -76,64 +70,6 @@ export class ShellSession {
     }
 
     this.#rl.prompt()
-  }
-
-  /** Create a new shell session. Discovers available commands via compgen. */
-  static async create(opts: ShellSessionOptions): Promise<ShellSession> {
-    const result = await opts.bash.exec('compgen -A command')
-    const commands = result.stdout.trim().split('\n')
-    return new ShellSession(opts, commands)
-  }
-
-  /** Built-in completion pipeline: commands -> per-command hook -> file/dir fallback. */
-  async #complete(line: string): Promise<CompletionResult> {
-    const parts = line.trimStart().split(/\s+/)
-    const word = parts[parts.length - 1] ?? ''
-
-    // First word - complete command names
-    if (parts.length <= 1) {
-      const hits = this.#commands.filter((c) => c.startsWith(word))
-      return [hits.length === 1 ? [hits[0] + ' '] : hits, word]
-    }
-
-    // Per-command hook - if provided and returns results, use them
-    if (this.#completeFn) {
-      const command = parts[0]
-      const hits = await this.#completeFn({ command, args: parts.slice(1), word, cwd: this.#cwd })
-      if (hits.length > 0) return [hits, word]
-    }
-
-    // Fallback - file/directory completion
-    return this.#completeFiles(word)
-  }
-
-  async #completeFiles(word: string): Promise<CompletionResult> {
-    const lastSlash = word.lastIndexOf('/')
-    const dirPart = lastSlash >= 0 ? word.slice(0, lastSlash + 1) : ''
-    const namePart = lastSlash >= 0 ? word.slice(lastSlash + 1) : word
-    const searchDir = dirPart ? posix.resolve(this.#cwd, dirPart) : this.#cwd
-
-    try {
-      const entries = await this.#bash.fs.readdir(searchDir)
-      const matches = entries.filter((e) => e.startsWith(namePart)).map((e) => dirPart + e)
-
-      const decorated = await Promise.all(
-        matches.map(async (match) => {
-          try {
-            const fullPath = posix.resolve(this.#cwd, match)
-            const stat = await this.#bash.fs.stat(fullPath)
-            if (stat.isDirectory) return match + '/'
-            return matches.length === 1 ? match + ' ' : match
-          } catch {
-            return match
-          }
-        })
-      )
-
-      return [decorated, word]
-    } catch {
-      return [[], word]
-    }
   }
 
   async #handleLine(line: string) {
