@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { posix, resolve } from 'node:path'
-import { createInterface } from 'node:readline'
 import { Chalk } from 'chalk'
-import { Bash, defineCommand, getCommandNames, MountableFs, OverlayFs } from 'just-bash'
+import { Bash, defineCommand, InMemoryFs, MountableFs, OverlayFs } from 'just-bash'
 import ssh2, { type ServerChannel } from 'ssh2'
+
+import { ShellSession } from './shell-session.js'
 
 // ssh2 is commonjs
 const { Server } = ssh2
@@ -56,9 +57,33 @@ async function loadHostKey(): Promise<Buffer> {
   return pem
 }
 
+/**
+ * MountableFs doesn't proxy sync methods to its base fs, so just-bash's
+ * initFilesystem skips creating /bin, /tmp, /dev, etc. and registerCommand
+ * can't write command stubs. This subclass exposes the base InMemoryFs's
+ * sync methods so the full Unix directory structure is initialized.
+ */
+class SyncMountableFs extends MountableFs {
+  #base: InMemoryFs
+
+  constructor(opts?: Omit<ConstructorParameters<typeof MountableFs>[0], 'base'>) {
+    const base = new InMemoryFs()
+    super({ ...opts, base })
+    this.#base = base
+  }
+
+  mkdirSync(path: string, options?: { recursive?: boolean }) {
+    return this.#base.mkdirSync(path, options)
+  }
+
+  writeFileSync(path: string, content: string | Uint8Array) {
+    return this.#base.writeFileSync(path, content)
+  }
+}
+
 function makeBash() {
   return new Bash({
-    fs: new MountableFs({
+    fs: new SyncMountableFs({
       mounts: [
         {
           mountPoint: '/supabase/docs',
@@ -98,58 +123,6 @@ function mb(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`
 }
 
-/** All known command names for tab completion. */
-const COMMAND_NAMES = [...getCommandNames(), ...aliasCommands.map((c) => c.name), 'exit']
-
-type CompletionResult = [string[], string]
-
-/** Tab-completion wired to just-bash's VFS and command list. */
-async function completeForBash(bash: Bash, line: string, cwd: string): Promise<CompletionResult> {
-  const trimmed = line.trimStart()
-  const parts = trimmed.split(/\s+/)
-
-  // Completing the command name (first word, no spaces yet)
-  if (parts.length <= 1) {
-    const partial = parts[0] ?? ''
-    const hits = COMMAND_NAMES.filter((c) => c.startsWith(partial))
-    return [hits.length === 1 ? [hits[0] + ' '] : hits, partial]
-  }
-
-  // Completing a file/directory argument
-  const partial = parts[parts.length - 1] ?? ''
-
-  // Split into directory prefix and name prefix
-  const lastSlash = partial.lastIndexOf('/')
-  const dirPart = lastSlash >= 0 ? partial.slice(0, lastSlash + 1) : ''
-  const namePart = lastSlash >= 0 ? partial.slice(lastSlash + 1) : partial
-
-  // Resolve the directory to list
-  const searchDir = dirPart ? posix.resolve(cwd, dirPart) : cwd
-
-  try {
-    const entries = await bash.fs.readdir(searchDir)
-    const matches = entries.filter((e) => e.startsWith(namePart)).map((e) => dirPart + e)
-
-    // Append / for directories (keep tabbing in), space for files (ready for next arg)
-    const decorated = await Promise.all(
-      matches.map(async (match) => {
-        try {
-          const fullPath = posix.resolve(cwd, match)
-          const stat = await bash.fs.stat(fullPath)
-          if (stat.isDirectory) return match + '/'
-          return matches.length === 1 ? match + ' ' : match
-        } catch {
-          return match
-        }
-      })
-    )
-
-    return [decorated, partial]
-  } catch {
-    return [[], partial]
-  }
-}
-
 async function main() {
   const hostKey = await loadHostKey()
 
@@ -170,137 +143,103 @@ async function main() {
       },
     },
     (client) => {
-    totalConnections++
-    activeConnections++
-    logStats('connect')
+      totalConnections++
+      activeConnections++
+      logStats('connect')
 
-    if (activeConnections > MAX_CONNECTIONS) {
-      console.log(`Rejecting connection: ${activeConnections}/${MAX_CONNECTIONS}`)
-      activeConnections--
-      client.end()
-      return
-    }
-
-    let activeChannel: ServerChannel | null = null
-    const idleTimer = setTimeout(() => {
-      console.log('Client idle timeout, disconnecting')
-      if (activeChannel) {
-        activeChannel.write(
-          `\r\n\r\n${green('Session timed out. Thanks for stopping by!')}\r\n\r\n`
-        )
+      if (activeConnections > MAX_CONNECTIONS) {
+        console.log(`Rejecting connection: ${activeConnections}/${MAX_CONNECTIONS}`)
+        activeConnections--
+        client.end()
+        return
       }
-      setTimeout(() => client.end(), 500)
-    }, IDLE_TIMEOUT_MS)
-    const resetIdle = () => {
-      idleTimer.refresh()
-    }
 
-    // Accept all auth unconditionally - shell is sandboxed to just-bash
-    client.on('authentication', (ctx) => ctx.accept())
+      let activeChannel: ServerChannel | null = null
+      const idleTimer = setTimeout(() => {
+        console.log('Client idle timeout, disconnecting')
+        if (activeChannel) {
+          activeChannel.write(
+            `\r\n\r\n${green('Session timed out. Thanks for stopping by!')}\r\n\r\n`
+          )
+        }
+        setTimeout(() => client.end(), 500)
+      }, IDLE_TIMEOUT_MS)
+      const resetIdle = () => {
+        idleTimer.refresh()
+      }
 
-    client.on('ready', () => {
-      client.on('session', (accept) => {
-        const session = accept()
+      // Accept all auth unconditionally - shell is sandboxed to just-bash
+      client.on('authentication', (ctx) => ctx.accept())
 
-        let hasPty = false
-        session.on('pty', (accept) => {
-          hasPty = true
-          accept()
-        })
+      client.on('ready', () => {
+        client.on('session', (accept) => {
+          const session = accept()
 
-        session.on('exec', async (accept, _reject, info) => {
-          resetIdle()
-          const channel = accept()
-          const command = info.command
-          console.log(`exec: ${command}`)
-
-          try {
-            const bash = makeBash()
-            const result = await bash.exec(command)
-            if (result.stdout) channel.write(result.stdout)
-            if (result.stderr) channel.stderr.write(result.stderr)
-            channel.exit(result.exitCode)
-          } catch (err) {
-            channel.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`)
-            channel.exit(1)
-          }
-
-          channel.end()
-        })
-
-        session.on('shell', async (accept) => {
-          const channel = accept()
-          activeChannel = channel
-          activeChannels.add(channel)
-          channel.on('close', () => activeChannels.delete(channel))
-          const bash = makeBash()
-
-          channel.write(BANNER)
-
-          // Reset idle on any keystroke
-          channel.on('data', () => resetIdle())
-
-          // Track cwd across exec calls (exec is isolated per call)
-          let cwd = bash.getCwd()
-          const getPrompt = () => `${green(posix.basename(cwd))} $ `
-
-          const rl = createInterface({
-            input: channel,
-            output: channel,
-            prompt: getPrompt(),
-            terminal: hasPty,
-            completer: (line: string, cb: (err: null, result: [string[], string]) => void) => {
-              completeForBash(bash, line, cwd)
-                .then((result) => cb(null, result))
-                .catch(() => cb(null, [[], line]))
-            },
+          let hasPty = false
+          session.on('pty', (accept) => {
+            hasPty = true
+            accept()
           })
 
-          rl.prompt()
+          session.on('exec', async (accept, _reject, info) => {
+            resetIdle()
+            const channel = accept()
+            const command = info.command
+            console.log(`exec: ${command}`)
 
-          rl.on('line', async (line) => {
-            const command = line.trim()
-            if (command === 'exit') {
-              channel.write(`\r\n${green('Thanks for stopping by!')}\r\n\r\n`)
-              rl.close()
-              channel.end()
-              return
+            try {
+              const bash = makeBash()
+              const result = await bash.exec(command)
+              if (result.stdout) channel.write(result.stdout)
+              if (result.stderr) channel.stderr.write(result.stderr)
+              channel.exit(result.exitCode)
+            } catch (err) {
+              channel.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`)
+              channel.exit(1)
             }
-            if (command) {
-              try {
-                const result = await bash.exec(command, { cwd })
-                if (result.stdout) channel.write(result.stdout.replace(/\n/g, '\r\n'))
-                if (result.stderr) channel.write(result.stderr.replace(/\n/g, '\r\n'))
-                // Persist cwd changes across isolated exec() calls
-                if (result.env.PWD) cwd = result.env.PWD
-              } catch (err) {
-                channel.write(`Error: ${err instanceof Error ? err.message : String(err)}\r\n`)
-              }
-            }
-            rl.setPrompt(getPrompt())
-            rl.prompt()
-          })
 
-          rl.on('close', () => {
             channel.end()
           })
 
-          // Handle SIGINT (Ctrl+C) - clear line, show new prompt
-          rl.on('SIGINT', () => {
-            channel.write('^C\r\n')
-            rl.prompt()
+          session.on('shell', async (accept) => {
+            const channel = accept()
+            activeChannel = channel
+            activeChannels.add(channel)
+            channel.on('close', () => activeChannels.delete(channel))
+
+            // Reset idle on any keystroke
+            channel.on('data', () => resetIdle())
+
+            const bash = makeBash()
+            const shell = await ShellSession.create({
+              bash,
+              input: channel,
+              output: channel,
+              terminal: hasPty,
+              banner: BANNER,
+              prompt: (cwd) => `${green(posix.basename(cwd))} $ `,
+              onLine: (command) => {
+                if (command === 'exit') {
+                  channel.write(`\r\n${green('Thanks for stopping by!')}\r\n\r\n`)
+                  shell.close()
+                  channel.end()
+                  return false
+                }
+              },
+              onExit: () => channel.end(),
+            })
           })
         })
       })
-    })
 
-    client.on('end', () => {
-      clearTimeout(idleTimer)
-      activeConnections--
-      logStats('disconnect')
-    })
-    client.on('error', (err) => console.error('Client error:', err.message))
-  })
+      client.on('end', () => {
+        clearTimeout(idleTimer)
+        activeConnections--
+        logStats('disconnect')
+      })
+      client.on('error', (err) => console.error('Client error:', err.message))
+    }
+  )
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Docs SSH server listening on port ${PORT}`)
