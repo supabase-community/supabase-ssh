@@ -21,8 +21,17 @@ export interface ShellSessionOptions {
   complete?: CommandCompleteFn
   /** Called when the session ends (Ctrl+D or stream closes). */
   onExit?: () => void
-  /** Called on each line before execution. Return false to skip exec (e.g. for 'exit' handling). */
-  onLine?: (command: string) => boolean | void
+  /** Called before execution. Return false to skip exec (e.g. for 'exit' handling). */
+  beforeExec?: (command: string) => boolean | void
+  /** Called after each command completes with execution details. */
+  afterExec?: (info: {
+    command: string
+    exitCode: number
+    stdoutBytes: number
+    stderrBytes: number
+    timedOut: boolean
+    durationMs: number
+  }) => void
   /** Per-command execution timeout in ms. When set, each exec gets an AbortSignal. */
   execTimeout?: number
 }
@@ -35,7 +44,8 @@ export class ShellSession {
   #completion: CompletionEngine
   #promptFn: (cwd: string) => string
   #onExit?: () => void
-  #onLine?: (command: string) => boolean | void
+  #beforeExec?: (command: string) => boolean | void
+  #afterExec?: ShellSessionOptions['afterExec']
   #output: Writable
   #execTimeout?: number
 
@@ -45,7 +55,8 @@ export class ShellSession {
     this.#promptFn = opts.prompt
     this.#completion = createCompletionEngine(opts.bash, opts.complete)
     this.#onExit = opts.onExit
-    this.#onLine = opts.onLine
+    this.#beforeExec = opts.beforeExec
+    this.#afterExec = opts.afterExec
     this.#output = opts.output
     this.#execTimeout = opts.execTimeout
 
@@ -79,12 +90,13 @@ export class ShellSession {
   async #handleLine(line: string) {
     const command = line.trim()
 
-    if (this.#onLine) {
-      const result = this.#onLine(command)
+    if (this.#beforeExec) {
+      const result = this.#beforeExec(command)
       if (result === false) return
     }
 
     if (command) {
+      const start = performance.now()
       try {
         const signal = this.#execTimeout
           ? AbortSignal.timeout(this.#execTimeout)
@@ -93,7 +105,23 @@ export class ShellSession {
         if (result.stdout) this.#output.write(result.stdout.replace(/\n/g, '\r\n'))
         if (result.stderr) this.#output.write(result.stderr.replace(/\n/g, '\r\n'))
         if (result.env.PWD) this.#cwd = result.env.PWD
+        this.#afterExec?.({
+          command,
+          exitCode: result.exitCode ?? 0,
+          stdoutBytes: Buffer.byteLength(result.stdout ?? ''),
+          stderrBytes: Buffer.byteLength(result.stderr ?? ''),
+          timedOut: false,
+          durationMs: performance.now() - start,
+        })
       } catch (err) {
+        this.#afterExec?.({
+          command,
+          exitCode: 1,
+          stdoutBytes: 0,
+          stderrBytes: 0,
+          timedOut: err instanceof Error && err.name === 'TimeoutError',
+          durationMs: performance.now() - start,
+        })
         this.#output.write(`Error: ${err instanceof Error ? err.message : String(err)}\r\n`)
       }
     }

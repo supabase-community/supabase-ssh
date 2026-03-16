@@ -98,13 +98,13 @@ describe('ShellSession', () => {
     session.close()
   })
 
-  it('skips execution when onLine returns false', async () => {
-    // onLine returns false only for 'skip-me', allowing 'echo after' through
-    const onLine = vi.fn((cmd: string) => (cmd === 'skip-me' ? false : undefined))
-    const { input, output, session } = createHarness({ onLine })
+  it('skips execution when beforeExec returns false', async () => {
+    // beforeExec returns false only for 'skip-me', allowing 'echo after' through
+    const beforeExec = vi.fn((cmd: string) => (cmd === 'skip-me' ? false : undefined))
+    const { input, output, session } = createHarness({ beforeExec })
     await waitForPrompt(output)
 
-    // When onLine returns false, handleLine returns early (no prompt, no exec).
+    // When beforeExec returns false, handleLine returns early (no prompt, no exec).
     // This matches real usage where the server closes the channel on 'exit'.
     // Send both lines - the second will produce a prompt we can wait for.
     sendLine(input, 'skip-me')
@@ -113,8 +113,8 @@ describe('ShellSession', () => {
 
     // 'echo after' ran, so we see its output. 'skip-me' was never executed.
     expect(buf).toContain('after')
-    expect(onLine).toHaveBeenCalledWith('skip-me')
-    expect(onLine).toHaveBeenCalledWith('echo after')
+    expect(beforeExec).toHaveBeenCalledWith('skip-me')
+    expect(beforeExec).toHaveBeenCalledWith('echo after')
     session.close()
   })
 

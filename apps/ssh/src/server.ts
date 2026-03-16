@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import { createSSHServer } from './ssh.js'
+import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 
 const PORT = parseInt(process.env.PORT ?? '22', 10)
 const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS ?? '30000', 10)
@@ -26,6 +27,7 @@ async function loadHostKey(): Promise<Buffer> {
 }
 
 async function main() {
+  initTelemetry()
   const hostKey = await loadHostKey()
 
   const srv = createSSHServer({
@@ -38,9 +40,10 @@ async function main() {
 
   await srv.listen()
 
-  function gracefulShutdown(signal: string) {
+  async function gracefulShutdown(signal: string) {
     console.log(`${signal} received`)
     srv.close('\r\n\r\nQuick update in progress - reconnect in a few seconds!\r\n\r\n')
+    await shutdownTelemetry()
     setTimeout(() => process.exit(0), 500)
   }
 

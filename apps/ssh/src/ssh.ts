@@ -1,10 +1,17 @@
-import { posix } from 'node:path'
 import type { AddressInfo } from 'node:net'
+import { posix } from 'node:path'
+import type { Span } from '@opentelemetry/api'
 import { Chalk } from 'chalk'
 import ssh2, { type ServerChannel } from 'ssh2'
 
 import { createBash } from './bash.js'
 import { ShellSession } from './shell-session.js'
+import {
+  createSessionContext,
+  endCommandSpan,
+  recordConnectionRejected,
+  startCommandSpan,
+} from './telemetry.js'
 
 const { Server } = ssh2
 
@@ -84,13 +91,16 @@ export function createSSHServer(opts: SSHServerOptions) {
         ],
       },
     },
-    (client) => {
+    (client, info) => {
       totalConnections++
       activeConnections++
       logStats('connect', activeConnections, totalConnections)
 
+      const sessionCtx = createSessionContext(info)
+
       if (activeConnections > maxConnections) {
         console.log(`Rejecting connection: ${activeConnections}/${maxConnections}`)
+        recordConnectionRejected(sessionCtx.subnet, sessionCtx.clientSoftware, activeConnections)
         activeConnections--
         client.end()
         return
@@ -112,6 +122,11 @@ export function createSSHServer(opts: SSHServerOptions) {
 
       client.on('authentication', (ctx) => ctx.accept())
 
+      client.on('handshake', (negotiated) => {
+        sessionCtx.negotiatedKex = negotiated.kex
+        sessionCtx.negotiatedCipher = negotiated.cs.cipher
+      })
+
       client.on('ready', () => {
         client.on('session', (accept) => {
           const session = accept()
@@ -119,32 +134,46 @@ export function createSSHServer(opts: SSHServerOptions) {
           let hasPty = false
           session.on('pty', (accept) => {
             hasPty = true
+            sessionCtx.hasPty = true
             accept()
           })
 
-          session.on('exec', async (accept, _reject, info) => {
+          session.on('exec', async (accept, _reject, execInfo) => {
+            sessionCtx.mode = 'exec'
             resetIdle()
             const channel = accept()
-            const command = info.command
+            const command = execInfo.command
             console.log(`exec: ${command}`)
 
+            const cmdSpan = startCommandSpan(sessionCtx, command)
             try {
               const bash = createBash(docsDir)
               const result = await bash.exec(command, { signal: AbortSignal.timeout(execTimeout) })
               if (result.stdout) channel.write(result.stdout)
               if (result.stderr) channel.stderr.write(result.stderr)
               channel.exit(result.exitCode)
+              endCommandSpan(cmdSpan, {
+                exitCode: result.exitCode ?? 0,
+                stdoutBytes: Buffer.byteLength(result.stdout ?? ''),
+                stderrBytes: Buffer.byteLength(result.stderr ?? ''),
+                timedOut: false,
+              })
             } catch (err) {
-              channel.stderr.write(
-                `Error: ${err instanceof Error ? err.message : String(err)}\n`
-              )
+              channel.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`)
               channel.exit(1)
+              endCommandSpan(cmdSpan, {
+                exitCode: 1,
+                stdoutBytes: 0,
+                stderrBytes: 0,
+                timedOut: err instanceof Error && err.name === 'TimeoutError',
+              })
             }
 
             channel.end()
           })
 
           session.on('shell', async (accept) => {
+            sessionCtx.mode = 'shell'
             const channel = accept()
             activeChannel = channel
             activeChannels.add(channel)
@@ -152,6 +181,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
             channel.on('data', () => resetIdle())
 
+            let activeSpan: Span | null = null
             const bash = createBash(docsDir)
             const shell = new ShellSession({
               bash,
@@ -161,12 +191,26 @@ export function createSSHServer(opts: SSHServerOptions) {
               execTimeout,
               banner: BANNER,
               prompt: (cwd) => `${green(posix.basename(cwd))} $ `,
-              onLine: (command) => {
+              beforeExec: (command) => {
                 if (command === 'exit') {
                   channel.write(`\r\n${green('Thanks for stopping by!')}\r\n\r\n`)
                   shell.close()
                   channel.end()
                   return false
+                }
+                if (command) {
+                  activeSpan = startCommandSpan(sessionCtx, command)
+                }
+              },
+              afterExec: (cmdInfo) => {
+                if (activeSpan) {
+                  endCommandSpan(activeSpan, {
+                    exitCode: cmdInfo.exitCode,
+                    stdoutBytes: cmdInfo.stdoutBytes,
+                    stderrBytes: cmdInfo.stderrBytes,
+                    timedOut: cmdInfo.timedOut,
+                  })
+                  activeSpan = null
                 }
               },
               onExit: () => channel.end(),

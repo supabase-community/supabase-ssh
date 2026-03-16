@@ -70,6 +70,14 @@ The host key is the only durable state. You can recover it from a running machin
 fly ssh console -C "printenv SSH_HOST_KEY" --app <app>
 ```
 
+**Telemetry (optional):**
+
+```bash
+fly secrets set LOGFLARE_SOURCE="<source-uuid>" LOGFLARE_API_KEY="<api-key>" --app <app>
+```
+
+Exports OTel spans to Logflare via OTLP protobuf. Without these secrets, telemetry is silently disabled.
+
 **Deploy:**
 
 ```bash
