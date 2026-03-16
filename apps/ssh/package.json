@@ -9,7 +9,8 @@
     "generate:host-key": "tsx scripts/generate-host-key.ts",
     "generate:host-key:local": "tsx scripts/generate-host-key.ts > ssh_host_key",
     "deploy:prod": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh",
-    "deploy:staging": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh-staging"
+    "deploy:staging": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh-staging",
+    "test": "vitest run"
   },
   "dependencies": {
     "chalk": "^5.4.1",

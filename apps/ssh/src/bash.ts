@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import { Bash, defineCommand, InMemoryFs, MountableFs, OverlayFs } from 'just-bash'
 
-const DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
+const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
 
 const aliasCommands = [
   defineCommand('ll', (args, ctx) => ctx.exec!(`ls -alF ${args.join(' ')}`, { cwd: ctx.cwd })),
@@ -35,14 +35,15 @@ class SyncMountableFs extends MountableFs {
 
 /**
  * Creates a sandboxed Bash instance.
+ * @param docsDir - Path to docs directory to mount. Defaults to DOCS_DIR env or ../docs/public/docs.
  */
-export function createBash() {
+export function createBash(docsDir = DEFAULT_DOCS_DIR) {
   return new Bash({
     fs: new SyncMountableFs({
       mounts: [
         {
           mountPoint: '/supabase/docs',
-          filesystem: new OverlayFs({ root: DOCS_DIR, mountPoint: '/', readOnly: true }),
+          filesystem: new OverlayFs({ root: docsDir, mountPoint: '/', readOnly: true }),
         },
       ],
     }),
