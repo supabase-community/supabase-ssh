@@ -13,13 +13,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.11",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.213.0",
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "chalk": "^5.4.1",
+    "hono": "^4.12.7",
     "just-bash": "^2.11.15",
+    "prom-client": "^15.1.3",
     "ssh2": "^1.16.0"
   },
   "devDependencies": {

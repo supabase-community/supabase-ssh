@@ -14,5 +14,6 @@ COPY apps/docs/public/docs ./apps/docs/public/docs
 
 WORKDIR /app/apps/ssh
 EXPOSE 22
+EXPOSE 9091
 
 CMD ["pnpm", "start"]

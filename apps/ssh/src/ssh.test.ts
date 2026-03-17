@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { Client } from 'ssh2'
 import { createSSHServer } from './ssh.js'
+import { app } from './http.js'
 
 const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
   type: 'pkcs1',
@@ -233,5 +234,31 @@ describe('SSH Server', () => {
       expect(disconnected).toBe(true)
       await shortSrv.close()
     }, 10_000)
+  })
+
+  describe('HTTP endpoints', () => {
+    it('/healthz returns status and active connections', async () => {
+      const res = await app.request('/healthz')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.status).toBe('ok')
+      expect(typeof body.activeConnections).toBe('number')
+      expect(typeof body.uptimeSeconds).toBe('number')
+    })
+
+    it('/metrics returns prometheus format with custom metrics', async () => {
+      // Run a command so counters are non-zero
+      const client = await connectClient()
+      await execCommand(client, 'echo metrics-test')
+
+      const res = await app.request('/metrics')
+      expect(res.status).toBe(200)
+      const text = await res.text()
+      expect(res.headers.get('content-type')).toContain('text/plain')
+      expect(text).toContain('ssh_commands_total')
+      expect(text).toContain('ssh_active_connections')
+      expect(text).toContain('ssh_command_duration_seconds')
+      expect(text).toContain('ssh_memory_rss_bytes')
+    })
   })
 })

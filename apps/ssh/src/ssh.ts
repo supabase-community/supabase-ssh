@@ -4,6 +4,15 @@ import type { Span } from '@opentelemetry/api'
 import { Chalk } from 'chalk'
 import ssh2, { type ServerChannel } from 'ssh2'
 
+import {
+  decConnections,
+  incCommands,
+  incCommandTimeouts,
+  incConnectionRejections,
+  incConnections,
+  observeCommandDuration,
+  observeSessionDuration,
+} from './metrics.js'
 import { createBash } from './shell/bash.js'
 import { createShellSession } from './shell/session.js'
 import {
@@ -85,6 +94,7 @@ export function createSSHServer(opts: SSHServerOptions) {
   const activeChannels = new Set<ServerChannel>()
   let totalConnections = 0
   let activeConnections = 0
+  let isShuttingDown = false
 
   const server = new Server(
     {
@@ -106,10 +116,14 @@ export function createSSHServer(opts: SSHServerOptions) {
       logStats('connect', activeConnections, totalConnections)
 
       const sessionCtx = createSessionContext(info)
+      const sessionStartTime = Date.now()
+      let sessionMode: 'exec' | 'shell' = 'exec'
+      let endReason = 'user_exit'
 
       if (activeConnections > maxConnections) {
         console.log(`Rejecting connection: ${activeConnections}/${maxConnections}`)
         recordConnectionRejected(sessionCtx.clientSoftware, activeConnections)
+        incConnectionRejections()
         activeConnections--
         client.end()
         return
@@ -119,6 +133,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
       const endSession = (reason: string) => {
         console.log(`Client ${reason}, disconnecting`)
+        endReason = reason === 'idle timeout' ? 'idle_timeout' : 'max_timeout'
         if (activeChannel) {
           activeChannel.write(
             `\r\n\r\n${green('Session timed out. Reconnect by running: ssh supabase.sh')}\r\n\r\n`
@@ -153,11 +168,14 @@ export function createSSHServer(opts: SSHServerOptions) {
 
           session.on('exec', async (accept, _reject, execInfo) => {
             sessionCtx.mode = 'exec'
+            sessionMode = 'exec'
+            incConnections('exec')
             resetIdle()
             const channel = accept()
             const command = execInfo.command
             console.log(`exec: ${command}`)
 
+            const cmdStart = Date.now()
             const cmdSpan = startCommandSpan(sessionCtx, command)
             try {
               const bash = await createBash(docsDir)
@@ -165,20 +183,27 @@ export function createSSHServer(opts: SSHServerOptions) {
               if (result.stdout) channel.write(result.stdout)
               if (result.stderr) channel.stderr.write(result.stderr)
               channel.exit(result.exitCode)
+              const exitCode = result.exitCode ?? 0
+              observeCommandDuration((Date.now() - cmdStart) / 1000)
+              incCommands(command, exitCode)
               endCommandSpan(cmdSpan, {
-                exitCode: result.exitCode ?? 0,
+                exitCode,
                 stdoutBytes: Buffer.byteLength(result.stdout ?? ''),
                 stderrBytes: Buffer.byteLength(result.stderr ?? ''),
                 timedOut: false,
               })
             } catch (err) {
+              const timedOut = err instanceof Error && err.name === 'TimeoutError'
               channel.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`)
               channel.exit(1)
+              observeCommandDuration((Date.now() - cmdStart) / 1000)
+              incCommands(command, 1)
+              if (timedOut) incCommandTimeouts()
               endCommandSpan(cmdSpan, {
                 exitCode: 1,
                 stdoutBytes: 0,
                 stderrBytes: 0,
-                timedOut: err instanceof Error && err.name === 'TimeoutError',
+                timedOut,
               })
             }
 
@@ -187,6 +212,8 @@ export function createSSHServer(opts: SSHServerOptions) {
 
           session.on('shell', async (accept) => {
             sessionCtx.mode = 'shell'
+            sessionMode = 'shell'
+            incConnections('shell')
             const channel = accept()
             activeChannel = channel
             activeChannels.add(channel)
@@ -216,6 +243,9 @@ export function createSSHServer(opts: SSHServerOptions) {
                 }
               },
               afterExec: (cmdInfo) => {
+                incCommands(cmdInfo.command ?? 'unknown', cmdInfo.exitCode)
+                observeCommandDuration(cmdInfo.durationMs / 1000)
+                if (cmdInfo.timedOut) incCommandTimeouts()
                 if (activeSpan) {
                   endCommandSpan(activeSpan, {
                     exitCode: cmdInfo.exitCode,
@@ -236,6 +266,9 @@ export function createSSHServer(opts: SSHServerOptions) {
         clearTimeout(idleTimer)
         clearTimeout(sessionTimer)
         activeConnections--
+        decConnections()
+        const reason = isShuttingDown ? 'server_shutdown' : endReason
+        observeSessionDuration((Date.now() - sessionStartTime) / 1000, sessionMode, reason)
         logStats('disconnect', activeConnections, totalConnections)
       })
       client.on('error', (err) => console.error('Client error:', err.message))
@@ -257,6 +290,7 @@ export function createSSHServer(opts: SSHServerOptions) {
     },
 
     close(message?: string): Promise<void> {
+      isShuttingDown = true
       for (const channel of activeChannels) {
         if (message) channel.write(message)
         channel.end()

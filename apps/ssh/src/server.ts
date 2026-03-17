@@ -2,10 +2,14 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
+import { serve } from '@hono/node-server'
+
+import { app } from './http.js'
 import { createSSHServer } from './ssh.js'
 import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 
 const PORT = parseInt(process.env.PORT ?? '22', 10)
+const METRICS_PORT = parseInt(process.env.METRICS_PORT ?? '9091', 10)
 const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '30000', 10)
 const MAX_SESSION_TIMEOUT = parseInt(process.env.MAX_SESSION_TIMEOUT ?? '600000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
@@ -42,10 +46,19 @@ async function main() {
 
   await srv.listen()
 
+  const httpServer = serve({ fetch: app.fetch, port: METRICS_PORT }, (info) => {
+    console.log(`HTTP server listening on port ${info.port} (/metrics, /healthz)`)
+  })
+
   async function gracefulShutdown(signal: string) {
     console.log(`${signal} received`)
+    // Notify active SSH sessions (non-blocking - server.close() waits for connection drain which may hang)
     srv.close('\r\n\r\nQuick update in progress - reconnect in a few seconds!\r\n\r\n')
-    await shutdownTelemetry()
+    await Promise.all([
+      new Promise<void>((resolve) => httpServer.close(() => resolve())),
+      shutdownTelemetry(),
+    ])
+    // Give SSH clients a moment to read the shutdown message, then force exit
     setTimeout(() => process.exit(0), 500)
   }
 
