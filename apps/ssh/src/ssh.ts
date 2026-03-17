@@ -49,12 +49,21 @@ const BANNER =
   `Or explore them yourself with tree/grep/cat/etc:\r\n\r\n`
 
 export interface SSHServerOptions {
+  /** PEM-encoded private key for the SSH server. */
   hostKey: Buffer
+  /** SSH listen port. */
   port?: number
+  /** Disconnect after this many ms of inactivity. */
   idleTimeout?: number
-  maxSessionTimeout?: number
-  maxConnections?: number
+  /** Max session duration in ms, regardless of activity. */
+  sessionTimeout?: number
+  /** Per-command execution timeout in ms. */
   execTimeout?: number
+  /** Connections above this start getting probabilistically dropped (linear ramp). */
+  softLimit?: number
+  /** All connections above this are rejected. */
+  hardLimit?: number
+  /** Root directory for docs content. */
   docsDir?: string
 }
 
@@ -64,9 +73,10 @@ export function createSSHServer(opts: SSHServerOptions) {
     hostKey,
     port = 22,
     idleTimeout = 30_000,
-    maxSessionTimeout = 600_000,
-    maxConnections = 100,
+    sessionTimeout = 600_000,
     execTimeout = 10_000,
+    softLimit = 80,
+    hardLimit = 100,
     docsDir,
   } = opts
 
@@ -96,13 +106,22 @@ export function createSSHServer(opts: SSHServerOptions) {
       let sessionMode: 'exec' | 'shell' = 'exec'
       let endReason = 'user_exit'
 
-      if (activeClients.size > maxConnections) {
-        console.log(`Rejecting connection: ${activeClients.size}/${maxConnections}`)
-        recordConnectionRejected(sessionCtx.clientSoftware, activeClients.size)
-        incConnectionRejections()
-        activeClients.delete(client)
-        client.end()
-        return
+      if (activeClients.size >= softLimit) {
+        const dropProbability =
+          activeClients.size >= hardLimit
+            ? 1
+            : (activeClients.size - softLimit) / (hardLimit - softLimit)
+
+        if (Math.random() < dropProbability) {
+          console.warn(
+            `Rejecting connection: ${activeClients.size} active (soft=${softLimit} hard=${hardLimit} p=${dropProbability.toFixed(2)})`
+          )
+          recordConnectionRejected(sessionCtx, activeClients.size, dropProbability)
+          incConnectionRejections()
+          activeClients.delete(client)
+          client.end()
+          return
+        }
       }
 
       let activeChannel: ServerChannel | null = null
@@ -119,7 +138,7 @@ export function createSSHServer(opts: SSHServerOptions) {
       }
 
       const idleTimer = setTimeout(() => endSession('idle timeout'), idleTimeout)
-      const sessionTimer = setTimeout(() => endSession('max session reached'), maxSessionTimeout)
+      const sessionTimer = setTimeout(() => endSession('max session reached'), sessionTimeout)
       const resetIdle = () => {
         idleTimer.refresh()
       }

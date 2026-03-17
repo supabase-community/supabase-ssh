@@ -11,9 +11,9 @@ import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 const PORT = parseInt(process.env.PORT ?? '22', 10)
 const METRICS_PORT = parseInt(process.env.METRICS_PORT ?? '9091', 10)
 const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '30000', 10)
-const MAX_SESSION_TIMEOUT = parseInt(process.env.MAX_SESSION_TIMEOUT ?? '600000', 10)
-const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
+const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT ?? '600000', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
+const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
 
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
@@ -39,9 +39,10 @@ async function main() {
     hostKey,
     port: PORT,
     idleTimeout: IDLE_TIMEOUT,
-    maxSessionTimeout: MAX_SESSION_TIMEOUT,
-    maxConnections: MAX_CONNECTIONS,
+    sessionTimeout: SESSION_TIMEOUT,
     execTimeout: EXEC_TIMEOUT,
+    softLimit: Math.floor(MAX_CONNECTIONS * 0.8),
+    hardLimit: MAX_CONNECTIONS,
   })
 
   await srv.listen()

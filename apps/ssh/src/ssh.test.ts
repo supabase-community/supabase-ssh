@@ -23,7 +23,8 @@ beforeAll(async () => {
     hostKey: Buffer.from(hostKey),
     port: 0,
     idleTimeout: 3000,
-    maxConnections: 2,
+    softLimit: 5,
+    hardLimit: 10,
     execTimeout: 5000,
     docsDir,
   })
@@ -161,25 +162,98 @@ describe('SSH Server', () => {
   })
 
   describe('connection management', () => {
-    it('rejects connections beyond max', async () => {
-      const c1 = await connectClient()
-      const c2 = await connectClient()
+    it('rejects connections at hard limit', async () => {
+      const limitSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        softLimit: 3,
+        hardLimit: 3,
+        execTimeout: 5000,
+        docsDir,
+      })
+      const limitPort = await limitSrv.listen()
 
-      // Third connection should be rejected
+      const connectTo = (p: number) =>
+        new Promise<Client>((resolve, reject) => {
+          const client = new Client()
+          clients.push(client)
+          client
+            .on('ready', () => resolve(client))
+            .on('error', reject)
+            .connect({ host: '127.0.0.1', port: p, username: 'test', password: 'ignored' })
+        })
+
+      const c1 = await connectTo(limitPort)
+      const c2 = await connectTo(limitPort)
+
+      // Third connection should be rejected (at hard limit)
       const rejected = await new Promise<boolean>((resolve) => {
         const c3 = new Client()
         clients.push(c3)
         c3.on('ready', () => resolve(false))
         c3.on('close', () => resolve(true))
         c3.on('error', () => resolve(true))
-        c3.connect({ host: '127.0.0.1', port, username: 'test', password: 'ignored' })
+        c3.connect({ host: '127.0.0.1', port: limitPort, username: 'test', password: 'ignored' })
       })
 
       expect(rejected).toBe(true)
 
-      // Clean up first two so afterEach doesn't fight them
       c1.end()
       c2.end()
+      await limitSrv.close()
+    })
+
+    it('probabilistically drops connections between soft and hard limit', async () => {
+      // softLimit=3, hardLimit=13 gives a wide ramp (10 slots)
+      // Fill to softLimit-1 (2 connections), then attempt 20 more.
+      // With linear ramp, some should be accepted and some rejected.
+      const probSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        softLimit: 3,
+        hardLimit: 13,
+        execTimeout: 5000,
+        docsDir,
+      })
+      const probPort = await probSrv.listen()
+
+      const connectTo = (p: number) =>
+        new Promise<Client>((resolve, reject) => {
+          const client = new Client()
+          clients.push(client)
+          client
+            .on('ready', () => resolve(client))
+            .on('error', reject)
+            .connect({ host: '127.0.0.1', port: p, username: 'test', password: 'ignored' })
+        })
+
+      // Fill 2 slots (below soft limit, always accepted)
+      const baseline = await Promise.all([connectTo(probPort), connectTo(probPort)])
+
+      // Attempt 20 more connections in the ramp zone
+      let accepted = 0
+      let rejected = 0
+      for (let i = 0; i < 20; i++) {
+        const result = await new Promise<'accepted' | 'rejected'>((resolve) => {
+          const client = new Client()
+          clients.push(client)
+          client.on('ready', () => resolve('accepted'))
+          client.on('close', () => resolve('rejected'))
+          client.on('error', () => resolve('rejected'))
+          client.connect({ host: '127.0.0.1', port: probPort, username: 'test', password: 'ignored' })
+        })
+        if (result === 'accepted') accepted++
+        else rejected++
+      }
+
+      // With a ramp from 3 to 13, we should see a mix - not all accepted, not all rejected
+      expect(accepted).toBeGreaterThan(0)
+      expect(rejected).toBeGreaterThan(0)
+
+      for (const c of baseline) c.end()
+      await probSrv.close()
     })
 
     it('disconnects idle clients with timeout message', async () => {
@@ -210,8 +284,7 @@ describe('SSH Server', () => {
         hostKey: Buffer.from(hostKey),
         port: 0,
         idleTimeout: 30_000,
-        maxSessionTimeout: 500,
-        maxConnections: 2,
+        sessionTimeout: 500,
         execTimeout: 5000,
         docsDir,
       })
@@ -252,7 +325,6 @@ describe('SSH Server', () => {
         hostKey: Buffer.from(hostKey),
         port: 0,
         idleTimeout: 30_000,
-        maxConnections: 2,
         execTimeout: 30_000,
         docsDir,
       })
@@ -295,7 +367,6 @@ describe('SSH Server', () => {
         hostKey: Buffer.from(hostKey),
         port: 0,
         idleTimeout: 30_000,
-        maxConnections: 2,
         execTimeout: 5000,
         docsDir,
       })

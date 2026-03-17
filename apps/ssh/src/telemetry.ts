@@ -137,15 +137,17 @@ export function endCommandSpan(
 
 /** Record a rejected connection as a self-contained span. */
 export function recordConnectionRejected(
-  clientSoftware: string,
-  activeConnections: number
+  ctx: SessionContext,
+  activeConnections: number,
+  dropProbability: number
 ): void {
   const tracer = trace.getTracer(TRACER_NAME)
   const span = tracer.startSpan('ssh.connection.rejected', {
     kind: SpanKind.SERVER,
     attributes: {
-      'ssh.client.software': clientSoftware,
+      ...sessionAttributes(ctx),
       'ssh.server.active_connections': activeConnections,
+      'ssh.server.drop_probability': dropProbability,
     },
   })
   span.end()

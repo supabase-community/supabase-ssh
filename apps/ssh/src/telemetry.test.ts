@@ -120,15 +120,24 @@ describe('span recording', () => {
     expect(text).toHaveLength(1024)
   })
 
-  it('recordConnectionRejected creates a span', () => {
+  it('recordConnectionRejected creates a span with session context', () => {
     exporter.reset()
 
-    recordConnectionRejected('OpenSSH_9.6', 101)
+    const ctx = createSessionContext({
+      header: {
+        versions: { protocol: '2.0', software: 'OpenSSH_9.6' },
+        comments: 'Ubuntu',
+      },
+    })
+
+    recordConnectionRejected(ctx, 101, 0.75)
 
     const spans = exporter.getFinishedSpans()
     expect(spans).toHaveLength(1)
     expect(spans[0].name).toBe('ssh.connection.rejected')
+    expect(spans[0].attributes['ssh.session.id']).toBe(ctx.sessionId)
     expect(spans[0].attributes['ssh.client.software']).toBe('OpenSSH_9.6')
     expect(spans[0].attributes['ssh.server.active_connections']).toBe(101)
+    expect(spans[0].attributes['ssh.server.drop_probability']).toBe(0.75)
   })
 })
