@@ -205,9 +205,18 @@ async function completeCommands(bash: Bash, word: string, cwd: string): Promise<
  * Appends / to directories, space to sole file matches (matching readline behavior).
  */
 async function completeFiles(bash: Bash, word: string, cwd: string): Promise<CompletionResult> {
-  const lastSlash = word.lastIndexOf('/')
-  const dirPart = lastSlash >= 0 ? word.slice(0, lastSlash + 1) : ''
-  const namePart = lastSlash >= 0 ? word.slice(lastSlash + 1) : word
+  // Expand ~ to $HOME for fs lookup, preserve ~/prefix in displayed completions
+  let tildePrefix = ''
+  let expanded = word
+  const home = bash.getEnv().HOME
+  if (home && (word === '~' || word.startsWith('~/'))) {
+    tildePrefix = word.startsWith('~/') ? '~/' : '~'
+    expanded = home + word.slice(1)
+  }
+
+  const lastSlash = expanded.lastIndexOf('/')
+  const dirPart = lastSlash >= 0 ? expanded.slice(0, lastSlash + 1) : ''
+  const namePart = lastSlash >= 0 ? expanded.slice(lastSlash + 1) : expanded
   const searchDir = dirPart ? posix.resolve(cwd, dirPart) : cwd
 
   try {
@@ -219,8 +228,12 @@ async function completeFiles(bash: Bash, word: string, cwd: string): Promise<Com
         try {
           const fullPath = posix.resolve(cwd, match)
           const stat = await bash.fs.stat(fullPath)
-          if (stat.isDirectory) return match + '/'
-          return matches.length === 1 ? match + ' ' : match
+          // Restore ~/prefix for display
+          const display = tildePrefix
+            ? tildePrefix + match.slice(home!.length + (tildePrefix === '~/' ? 1 : 0))
+            : match
+          if (stat.isDirectory) return display + '/'
+          return matches.length === 1 ? display + ' ' : display
         } catch {
           return match
         }

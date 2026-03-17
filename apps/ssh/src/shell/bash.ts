@@ -64,6 +64,7 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
     }),
     cwd: '/supabase',
     env: {
+      HOME: '/supabase',
       BASH_ALIAS_ll: 'ls -alF',
       BASH_ALIAS_la: 'ls -a',
       BASH_ALIAS_l: 'ls -CF',
