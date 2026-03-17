@@ -10,7 +10,7 @@ import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 
 const PORT = parseInt(process.env.PORT ?? '22', 10)
 const METRICS_PORT = parseInt(process.env.METRICS_PORT ?? '9091', 10)
-const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '30000', 10)
+const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '60000', 10)
 const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT ?? '600000', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)

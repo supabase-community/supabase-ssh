@@ -72,7 +72,7 @@ export function createSSHServer(opts: SSHServerOptions) {
   const {
     hostKey,
     port = 22,
-    idleTimeout = 30_000,
+    idleTimeout = 60_000,
     sessionTimeout = 600_000,
     execTimeout = 10_000,
     softLimit = 80,
