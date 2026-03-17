@@ -135,12 +135,14 @@ describe('Server process', () => {
       client.shell((err, stream) => {
         if (err) return reject(err)
         let buf = ''
-        stream.on('data', (data: Buffer) => {
+        const onData = (data: Buffer) => {
           buf += data.toString()
           if (buf.includes('reconnect')) {
             resolve(buf)
           }
-        })
+        }
+        stream.on('data', onData)
+        stream.stderr.on('data', onData)
         // Wait for shell to be ready, then send SIGTERM
         const waitForPrompt = () => {
           if (buf.includes('$ ')) {
@@ -170,12 +172,14 @@ describe('Server process', () => {
       client.shell((err, stream) => {
         if (err) return reject(err)
         let buf = ''
-        stream.on('data', (data: Buffer) => {
+        const onData = (data: Buffer) => {
           buf += data.toString()
           if (buf.includes('reconnect')) {
             resolve(buf)
           }
-        })
+        }
+        stream.on('data', onData)
+        stream.stderr.on('data', onData)
         const waitForPrompt = () => {
           if (buf.includes('$ ')) {
             proc!.kill('SIGINT')

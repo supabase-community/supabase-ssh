@@ -58,27 +58,6 @@ export interface SSHServerOptions {
   docsDir?: string
 }
 
-const RSS_LIMIT = 512 * 1024 * 1024
-const MEMORY_WARN_THRESHOLD = 0.85
-
-function mb(bytes: number) {
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
-}
-
-function logStats(event: string, activeConnections: number, totalConnections: number) {
-  const mem = process.memoryUsage()
-  console.log(
-    `[stats] ${event} | active=${activeConnections} total=${totalConnections}` +
-      ` | rss=${mb(mem.rss)}/${mb(RSS_LIMIT)} heap=${mb(mem.heapUsed)} external=${mb(mem.external)}`
-  )
-  if (mem.rss / RSS_LIMIT > MEMORY_WARN_THRESHOLD) {
-    console.warn(
-      `[oom-warning] rss at ${((mem.rss / RSS_LIMIT) * 100).toFixed(0)}% ` +
-        `(${mb(mem.rss)}/${mb(RSS_LIMIT)}) - active=${activeConnections}`
-    )
-  }
-}
-
 /** Creates a testable SSH server. Call listen() to start, close() to stop. */
 export function createSSHServer(opts: SSHServerOptions) {
   const {
@@ -91,9 +70,7 @@ export function createSSHServer(opts: SSHServerOptions) {
     docsDir,
   } = opts
 
-  const activeChannels = new Set<ServerChannel>()
-  let totalConnections = 0
-  let activeConnections = 0
+  const activeClients = new Map<ssh2.Connection, Set<ServerChannel>>()
   let isShuttingDown = false
 
   const server = new Server(
@@ -111,20 +88,19 @@ export function createSSHServer(opts: SSHServerOptions) {
       },
     },
     (client, info) => {
-      totalConnections++
-      activeConnections++
-      logStats('connect', activeConnections, totalConnections)
+      const channels = new Set<ServerChannel>()
+      activeClients.set(client, channels)
 
       const sessionCtx = createSessionContext(info)
       const sessionStartTime = Date.now()
       let sessionMode: 'exec' | 'shell' = 'exec'
       let endReason = 'user_exit'
 
-      if (activeConnections > maxConnections) {
-        console.log(`Rejecting connection: ${activeConnections}/${maxConnections}`)
-        recordConnectionRejected(sessionCtx.clientSoftware, activeConnections)
+      if (activeClients.size > maxConnections) {
+        console.log(`Rejecting connection: ${activeClients.size}/${maxConnections}`)
+        recordConnectionRejected(sessionCtx.clientSoftware, activeClients.size)
         incConnectionRejections()
-        activeConnections--
+        activeClients.delete(client)
         client.end()
         return
       }
@@ -135,7 +111,7 @@ export function createSSHServer(opts: SSHServerOptions) {
         console.log(`Client ${reason}, disconnecting`)
         endReason = reason === 'idle timeout' ? 'idle_timeout' : 'max_timeout'
         if (activeChannel) {
-          activeChannel.write(
+          activeChannel.stderr.write(
             `\r\n\r\n${green('Session timed out. Reconnect by running: ssh supabase.sh')}\r\n\r\n`
           )
         }
@@ -172,6 +148,8 @@ export function createSSHServer(opts: SSHServerOptions) {
             incConnections('exec')
             resetIdle()
             const channel = accept()
+            channels.add(channel)
+            channel.on('close', () => channels.delete(channel))
             const command = execInfo.command
             console.log(`exec: ${command}`)
 
@@ -216,8 +194,8 @@ export function createSSHServer(opts: SSHServerOptions) {
             incConnections('shell')
             const channel = accept()
             activeChannel = channel
-            activeChannels.add(channel)
-            channel.on('close', () => activeChannels.delete(channel))
+            channels.add(channel)
+            channel.on('close', () => channels.delete(channel))
 
             channel.on('data', () => resetIdle())
 
@@ -265,11 +243,10 @@ export function createSSHServer(opts: SSHServerOptions) {
       client.on('end', () => {
         clearTimeout(idleTimer)
         clearTimeout(sessionTimer)
-        activeConnections--
+        activeClients.delete(client)
         decConnections()
         const reason = isShuttingDown ? 'server_shutdown' : endReason
         observeSessionDuration((Date.now() - sessionStartTime) / 1000, sessionMode, reason)
-        logStats('disconnect', activeConnections, totalConnections)
       })
       client.on('error', (err) => console.error('Client error:', err.message))
     }
@@ -291,9 +268,12 @@ export function createSSHServer(opts: SSHServerOptions) {
 
     close(message?: string): Promise<void> {
       isShuttingDown = true
-      for (const channel of activeChannels) {
-        if (message) channel.write(message)
-        channel.end()
+      for (const [c, channels] of activeClients) {
+        for (const channel of channels) {
+          if (message) channel.stderr.write(message)
+          channel.exit(255)
+        }
+        c.end()
       }
       return new Promise((resolve) => {
         server.close(() => resolve())
