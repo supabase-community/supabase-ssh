@@ -134,3 +134,8 @@ export class ShellSession {
     this.#rl.close()
   }
 }
+
+/** Creates an interactive shell session. */
+export function createShellSession(opts: ShellSessionOptions) {
+  return new ShellSession(opts)
+}

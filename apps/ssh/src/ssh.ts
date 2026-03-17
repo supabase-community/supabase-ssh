@@ -5,7 +5,7 @@ import { Chalk } from 'chalk'
 import ssh2, { type ServerChannel } from 'ssh2'
 
 import { createBash } from './shell/bash.js'
-import { ShellSession } from './shell/session.js'
+import { createShellSession } from './shell/session.js'
 import {
   createSessionContext,
   endCommandSpan,
@@ -190,7 +190,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
             let activeSpan: Span | null = null
             const bash = createBash(docsDir)
-            const shell = new ShellSession({
+            const shell = createShellSession({
               bash,
               input: channel,
               output: channel,
