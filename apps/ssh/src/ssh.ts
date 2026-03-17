@@ -311,13 +311,22 @@ export function createSSHServer(opts: SSHServerOptions) {
 
         // 3. If drain timed out, notify and force-disconnect remaining sessions
         if (timedOut) {
-          for (const [c, channels] of activeClients) {
-            for (const channel of channels) {
-              if (message) channel.stderr.end(message)
-              channel.exit(255)
-            }
+          const disconnects = Array.from(activeClients).map(async ([c, channels]) => {
+            const flushes = Array.from(channels).map(
+              (channel) =>
+                new Promise<void>((resolve) => {
+                  if (message) {
+                    channel.stderr.end(message, () => resolve())
+                  } else {
+                    resolve()
+                  }
+                  channel.exit(255)
+                })
+            )
+            await Promise.all(flushes)
             c.end()
-          }
+          })
+          await Promise.all(disconnects)
         }
       }
 
