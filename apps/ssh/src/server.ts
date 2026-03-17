@@ -6,7 +6,8 @@ import { createSSHServer } from './ssh.js'
 import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 
 const PORT = parseInt(process.env.PORT ?? '22', 10)
-const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS ?? '30000', 10)
+const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '30000', 10)
+const MAX_SESSION_TIMEOUT = parseInt(process.env.MAX_SESSION_TIMEOUT ?? '600000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
 
@@ -33,7 +34,8 @@ async function main() {
   const srv = createSSHServer({
     hostKey,
     port: PORT,
-    idleTimeoutMs: IDLE_TIMEOUT_MS,
+    idleTimeout: IDLE_TIMEOUT,
+    maxSessionTimeout: MAX_SESSION_TIMEOUT,
     maxConnections: MAX_CONNECTIONS,
     execTimeout: EXEC_TIMEOUT,
   })

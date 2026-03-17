@@ -42,7 +42,8 @@ const BANNER =
 export interface SSHServerOptions {
   hostKey: Buffer
   port?: number
-  idleTimeoutMs?: number
+  idleTimeout?: number
+  maxSessionTimeout?: number
   maxConnections?: number
   execTimeout?: number
   docsDir?: string
@@ -74,7 +75,8 @@ export function createSSHServer(opts: SSHServerOptions) {
   const {
     hostKey,
     port = 22,
-    idleTimeoutMs = 30_000,
+    idleTimeout = 30_000,
+    maxSessionTimeout = 600_000,
     maxConnections = 100,
     execTimeout = 10_000,
     docsDir,
@@ -114,15 +116,19 @@ export function createSSHServer(opts: SSHServerOptions) {
       }
 
       let activeChannel: ServerChannel | null = null
-      const idleTimer = setTimeout(() => {
-        console.log('Client idle timeout, disconnecting')
+
+      const endSession = (reason: string) => {
+        console.log(`Client ${reason}, disconnecting`)
         if (activeChannel) {
           activeChannel.write(
-            `\r\n\r\n${green('Session timed out. Thanks for stopping by!')}\r\n\r\n`
+            `\r\n\r\n${green('Session timed out. Reconnect by running: ssh supabase.sh')}\r\n\r\n`
           )
         }
         setTimeout(() => client.end(), 500)
-      }, idleTimeoutMs)
+      }
+
+      const idleTimer = setTimeout(() => endSession('idle timeout'), idleTimeout)
+      const sessionTimer = setTimeout(() => endSession('max session reached'), maxSessionTimeout)
       const resetIdle = () => {
         idleTimer.refresh()
       }
@@ -228,6 +234,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
       client.on('end', () => {
         clearTimeout(idleTimer)
+        clearTimeout(sessionTimer)
         activeConnections--
         logStats('disconnect', activeConnections, totalConnections)
       })

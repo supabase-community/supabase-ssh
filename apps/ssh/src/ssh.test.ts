@@ -21,7 +21,7 @@ beforeAll(async () => {
   srv = createSSHServer({
     hostKey: Buffer.from(hostKey),
     port: 0,
-    idleTimeoutMs: 3000,
+    idleTimeout: 3000,
     maxConnections: 2,
     execTimeout: 5000,
     docsDir,
@@ -195,6 +195,43 @@ describe('SSH Server', () => {
       })
 
       expect(disconnected).toBe(true)
+    }, 10_000)
+
+    it('disconnects after max session timeout even if active', async () => {
+      const shortSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        maxSessionTimeout: 500,
+        maxConnections: 2,
+        execTimeout: 5000,
+        docsDir,
+      })
+      const shortPort = await shortSrv.listen()
+
+      const client = new Client()
+      clients.push(client)
+      await new Promise<void>((resolve, reject) => {
+        client.on('ready', () => resolve()).on('error', reject)
+        client.connect({ host: '127.0.0.1', port: shortPort, username: 'test', password: 'ignored' })
+      })
+
+      const disconnected = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), 10_000)
+        client.on('close', () => {
+          clearTimeout(timer)
+          resolve(true)
+        })
+        // Keep sending data - idle timeout won't fire, but max session should
+        client.shell((err, stream) => {
+          if (err) return
+          const keepAlive = setInterval(() => stream.write('echo ping\n'), 100)
+          stream.on('close', () => clearInterval(keepAlive))
+        })
+      })
+
+      expect(disconnected).toBe(true)
+      await shortSrv.close()
     }, 10_000)
   })
 })
