@@ -109,7 +109,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
       if (activeConnections > maxConnections) {
         console.log(`Rejecting connection: ${activeConnections}/${maxConnections}`)
-        recordConnectionRejected(sessionCtx.subnet, sessionCtx.clientSoftware, activeConnections)
+        recordConnectionRejected(sessionCtx.clientSoftware, activeConnections)
         activeConnections--
         client.end()
         return
