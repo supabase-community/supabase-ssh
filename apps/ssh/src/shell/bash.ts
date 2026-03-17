@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { Bash, defineCommand, OverlayFs } from 'just-bash'
+
 import { ExtendedMountableFs } from './extended-mountable-fs.js'
 
 const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
@@ -27,12 +28,6 @@ ssh supabase.sh grep -r 'RLS' /supabase/docs/guides/auth --include='*.md' -l
 All docs live under \`/supabase/docs/\` as markdown files. You can use any standard Unix tools (grep, find, cat, etc.) to search and read them.
 `
 
-const aliasCommands = [
-  defineCommand('ll', (args, ctx) => ctx.exec!(`ls -alF ${args.join(' ')}`, { cwd: ctx.cwd })),
-  defineCommand('la', (args, ctx) => ctx.exec!(`ls -a ${args.join(' ')}`, { cwd: ctx.cwd })),
-  defineCommand('l', (args, ctx) => ctx.exec!(`ls -CF ${args.join(' ')}`, { cwd: ctx.cwd })),
-]
-
 const agentsCommand = defineCommand('agents', async () => ({
   stdout: AGENTS_MD,
   stderr: '',
@@ -56,8 +51,8 @@ const sshCommand = defineCommand('ssh', async (args) => {
  * Creates a sandboxed Bash instance.
  * @param docsDir - Path to docs directory to mount. Defaults to DOCS_DIR env or ../docs/public/docs.
  */
-export function createBash(docsDir = DEFAULT_DOCS_DIR) {
-  return new Bash({
+export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
+  const bash = new Bash({
     fs: new ExtendedMountableFs({
       readOnly: true,
       mounts: [
@@ -68,7 +63,12 @@ export function createBash(docsDir = DEFAULT_DOCS_DIR) {
       ],
     }),
     cwd: '/supabase',
-    customCommands: [...aliasCommands, agentsCommand, sshCommand],
+    env: {
+      BASH_ALIAS_ll: 'ls -alF',
+      BASH_ALIAS_la: 'ls -a',
+      BASH_ALIAS_l: 'ls -CF',
+    },
+    customCommands: [agentsCommand, sshCommand],
     defenseInDepth: true,
     executionLimits: {
       maxCommandCount: 1000,
@@ -84,4 +84,9 @@ export function createBash(docsDir = DEFAULT_DOCS_DIR) {
       maxHeredocSize: 1024 * 1024, // 1MB
     },
   })
+
+  // Enable alias expansion
+  await bash.exec('shopt -s expand_aliases')
+
+  return bash
 }

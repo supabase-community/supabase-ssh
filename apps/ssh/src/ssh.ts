@@ -154,7 +154,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
             const cmdSpan = startCommandSpan(sessionCtx, command)
             try {
-              const bash = createBash(docsDir)
+              const bash = await createBash(docsDir)
               const result = await bash.exec(command, { signal: AbortSignal.timeout(execTimeout) })
               if (result.stdout) channel.write(result.stdout)
               if (result.stderr) channel.stderr.write(result.stderr)
@@ -189,7 +189,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             channel.on('data', () => resetIdle())
 
             let activeSpan: Span | null = null
-            const bash = createBash(docsDir)
+            const bash = await createBash(docsDir)
             const shell = createShellSession({
               bash,
               input: channel,
