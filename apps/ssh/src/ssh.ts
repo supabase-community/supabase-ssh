@@ -285,18 +285,43 @@ export function createSSHServer(opts: SSHServerOptions) {
       })
     },
 
-    close(message?: string): Promise<void> {
+    async close(message?: string, drainTimeout = 15_000): Promise<void> {
       isShuttingDown = true
-      for (const [c, channels] of activeClients) {
-        for (const channel of channels) {
-          if (message) channel.stderr.write(message)
-          channel.exit(255)
-        }
-        c.end()
-      }
-      return new Promise((resolve) => {
+
+      // 1. Stop accepting new connections
+      const serverClosed = new Promise<void>((resolve) => {
         server.close(() => resolve())
       })
+
+      if (activeClients.size > 0) {
+        // 2. Wait for in-flight commands to finish naturally
+        const drained = new Promise<void>((resolve) => {
+          const check = () => {
+            if (activeClients.size === 0) resolve()
+          }
+          for (const [c] of activeClients) {
+            c.on('end', check)
+          }
+        })
+
+        const timedOut = await Promise.race([
+          drained.then(() => false),
+          new Promise<true>((resolve) => setTimeout(() => resolve(true), drainTimeout)),
+        ])
+
+        // 3. If drain timed out, notify and force-disconnect remaining sessions
+        if (timedOut) {
+          for (const [c, channels] of activeClients) {
+            for (const channel of channels) {
+              if (message) channel.stderr.end(message)
+              channel.exit(255)
+            }
+            c.end()
+          }
+        }
+      }
+
+      await serverClosed
     },
   }
 }

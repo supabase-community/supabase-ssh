@@ -253,6 +253,7 @@ describe('SSH Server', () => {
       expect(rejected).toBeGreaterThan(0)
 
       for (const c of baseline) c.end()
+      for (const c of clients) c.end()
       await probSrv.close()
     })
 
@@ -320,7 +321,8 @@ describe('SSH Server', () => {
       await shortSrv.close()
     }, 10_000)
 
-    it('notifies exec channels on server shutdown with stderr', async () => {
+    it('force-disconnects exec channels after drain timeout with notification', async () => {
+      const drainTimeout = 500
       const shutdownSrv = createSSHServer({
         hostKey: Buffer.from(hostKey),
         port: 0,
@@ -337,32 +339,42 @@ describe('SSH Server', () => {
         client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
       })
 
-      const result = await new Promise<{ stderr: string; code: number | null }>((resolve, reject) => {
-        client.exec('sleep 10', (err, stream) => {
-          if (err) return reject(err)
-          let stderr = ''
-          let exitCode: number | null = null
-          stream.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString()
-          })
-          stream.on('exit', (code: number | null) => {
-            exitCode = code
-          })
-          // stream.on('close') may not fire when connection ends abruptly
-          client.on('close', () => resolve({ stderr, code: exitCode }))
+      const result = await new Promise<{ stderr: string; code: number | null; elapsed: number }>(
+        (resolve, reject) => {
+          client.exec('sleep 10', (err, stream) => {
+            if (err) return reject(err)
+            let stderr = ''
+            let exitCode: number | null = null
+            stream.stderr.on('data', (data: Buffer) => {
+              stderr += data.toString()
+            })
+            stream.on('exit', (code: number | null) => {
+              exitCode = code
+            })
+            // stream.on('close') may not fire when connection ends abruptly
+            const closeStart = Date.now()
+            client.on('close', () =>
+              resolve({ stderr, code: exitCode, elapsed: Date.now() - closeStart })
+            )
 
-          // Give the command a moment to start, then trigger shutdown
-          setTimeout(() => {
-            shutdownSrv.close('Server is shutting down\n')
-          }, 500)
-        })
-      })
+            // Give the command a moment to start, then trigger shutdown
+            setTimeout(() => {
+              closeStart
+              shutdownSrv.close('Server is shutting down\n', drainTimeout)
+            }, 500)
+          })
+        }
+      )
 
       expect(result.stderr).toContain('Server is shutting down')
       expect(result.code).toBe(255)
+      // Disconnected after drain timeout, not immediately and not after full sleep 10
+      expect(result.elapsed).toBeGreaterThanOrEqual(drainTimeout * 0.8)
+      expect(result.elapsed).toBeLessThan(5000)
     }, 10_000)
 
-    it('notifies shell channels on server shutdown with stderr', async () => {
+    it('force-disconnects shell channels after drain timeout with notification', async () => {
+      const drainTimeout = 500
       const shutdownSrv = createSSHServer({
         hostKey: Buffer.from(hostKey),
         port: 0,
@@ -379,33 +391,128 @@ describe('SSH Server', () => {
         client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
       })
 
-      const result = await new Promise<{ stderr: string; code: number }>((resolve, reject) => {
-        client.shell((err, stream) => {
+      const result = await new Promise<{ stderr: string; code: number; elapsed: number }>(
+        (resolve, reject) => {
+          client.shell((err, stream) => {
+            if (err) return reject(err)
+            let stdout = ''
+            let stderr = ''
+            let closeStart = 0
+            stream.on('data', (data: Buffer) => {
+              stdout += data.toString()
+            })
+            stream.stderr.on('data', (data: Buffer) => {
+              stderr += data.toString()
+            })
+            stream.on('close', (code: number) =>
+              resolve({ stderr, code, elapsed: Date.now() - closeStart })
+            )
+
+            // Wait for prompt, then trigger shutdown
+            const waitForPrompt = () => {
+              if (stdout.includes('$ ')) {
+                closeStart = Date.now()
+                shutdownSrv.close('Server is shutting down\n', drainTimeout)
+              } else {
+                setTimeout(waitForPrompt, 50)
+              }
+            }
+            waitForPrompt()
+          })
+        }
+      )
+
+      expect(result.stderr).toContain('Server is shutting down')
+      expect(result.code).toBe(255)
+      // Disconnected after drain timeout, not immediately
+      expect(result.elapsed).toBeGreaterThanOrEqual(drainTimeout * 0.8)
+      expect(result.elapsed).toBeLessThan(5000)
+    }, 10_000)
+
+    it('rejects new connections during shutdown drain', async () => {
+      const shutdownSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        execTimeout: 30_000,
+        docsDir,
+      })
+      const shutdownPort = await shutdownSrv.listen()
+
+      // Connect a client with a long-running command to keep the server draining
+      const client = new Client()
+      clients.push(client)
+      await new Promise<void>((resolve, reject) => {
+        client.on('ready', () => resolve()).on('error', reject)
+        client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+      })
+      client.exec('sleep 30', () => {})
+
+      // Start shutdown with long drain - server should stop accepting but wait
+      const closePromise = shutdownSrv.close('Shutting down\n', 5000)
+
+      // Try to connect during drain window
+      const rejected = await new Promise<boolean>((resolve) => {
+        const lateClient = new Client()
+        clients.push(lateClient)
+        lateClient.on('ready', () => resolve(false))
+        lateClient.on('close', () => resolve(true))
+        lateClient.on('error', () => resolve(true))
+        lateClient.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+      })
+
+      expect(rejected).toBe(true)
+
+      client.end()
+      await closePromise
+    }, 10_000)
+
+    it('drains naturally without notifying when connections finish before timeout', async () => {
+      const shutdownSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        execTimeout: 5000,
+        docsDir,
+      })
+      const shutdownPort = await shutdownSrv.listen()
+
+      const client = new Client()
+      clients.push(client)
+      await new Promise<void>((resolve, reject) => {
+        client.on('ready', () => resolve()).on('error', reject)
+        client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+      })
+
+      // Run a fast command and collect any stderr (shutdown message)
+      let stderr = ''
+      const execDone = new Promise<{ stdout: string; code: number }>((resolve, reject) => {
+        client.exec('echo fast', (err, stream) => {
           if (err) return reject(err)
           let stdout = ''
-          let stderr = ''
           stream.on('data', (data: Buffer) => {
             stdout += data.toString()
           })
           stream.stderr.on('data', (data: Buffer) => {
             stderr += data.toString()
           })
-          stream.on('close', (code: number) => resolve({ stderr, code }))
-
-          // Wait for prompt, then trigger shutdown
-          const waitForPrompt = () => {
-            if (stdout.includes('$ ')) {
-              shutdownSrv.close('Server is shutting down\n')
-            } else {
-              setTimeout(waitForPrompt, 50)
-            }
-          }
-          waitForPrompt()
+          stream.on('close', (code: number) => resolve({ stdout, code }))
         })
       })
 
-      expect(result.stderr).toContain('Server is shutting down')
-      expect(result.code).toBe(255)
+      // Start shutdown with long drain - command should finish naturally
+      const closePromise = shutdownSrv.close('Should not see this\n', 5000)
+
+      const result = await execDone
+      expect(result.stdout).toBe('fast\n')
+      expect(result.code).toBe(0)
+
+      // Client disconnects naturally after command completes
+      client.end()
+      await closePromise
+
+      // Should NOT have received the shutdown notification
+      expect(stderr).toBe('')
     }, 10_000)
   })
 

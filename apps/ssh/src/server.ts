@@ -14,6 +14,7 @@ const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '30000', 10)
 const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT ?? '600000', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
+const DRAIN_TIMEOUT = parseInt(process.env.DRAIN_TIMEOUT ?? '15000', 10)
 
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
@@ -53,14 +54,12 @@ async function main() {
 
   async function gracefulShutdown(signal: string) {
     console.log(`${signal} received`)
-    // Notify active SSH sessions (non-blocking - server.close() waits for connection drain which may hang)
-    srv.close('\r\n\r\nQuick update in progress - reconnect in a few seconds!\r\n\r\n')
     await Promise.all([
+      srv.close('\r\n\r\nQuick update in progress - reconnect in a few seconds!\r\n\r\n', DRAIN_TIMEOUT),
       new Promise<void>((resolve) => httpServer.close(() => resolve())),
       shutdownTelemetry(),
     ])
-    // Give SSH clients a moment to read the shutdown message, then force exit
-    setTimeout(() => process.exit(0), 500)
+    process.exit(0)
   }
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))

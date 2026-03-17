@@ -15,8 +15,8 @@ primary_region = "iad"
 #     fly ssh console -C "printenv SSH_HOST_KEY" --app <app>
 
 [deploy]
-strategy = "immediate"
-kill_timeout = "5s"
+strategy = "rolling"
+kill_timeout = "30s"
 
 [build]
 dockerfile = "Dockerfile"
@@ -36,3 +36,16 @@ min_machines_running = 1
 
 [[services.ports]]
 port = 22
+
+[[services.tcp_checks]]
+interval = "10s"
+timeout = "2s"
+grace_period = "5s"
+
+[checks.healthz]
+type = "http"
+port = 9091
+path = "/healthz"
+interval = "10s"
+timeout = "2s"
+grace_period = "5s"
