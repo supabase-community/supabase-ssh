@@ -4,8 +4,8 @@ import type { Span } from '@opentelemetry/api'
 import { Chalk } from 'chalk'
 import ssh2, { type ServerChannel } from 'ssh2'
 
-import { createBash } from './bash.js'
-import { ShellSession } from './shell-session.js'
+import { createBash } from './shell/bash.js'
+import { ShellSession } from './shell/session.js'
 import {
   createSessionContext,
   endCommandSpan,
@@ -20,17 +20,24 @@ const chalk = new Chalk({ level: 3 })
 const green = chalk.rgb(62, 207, 142)
 
 const LOGO =
-  '  ____                    _                    \r\n' +
-  ' / ___| _   _ _ __   __ _| |__   __ _ ___  ___ \r\n' +
-  " \\___ \\| | | | '_ \\ /  ` | '_ \\ / _` / __|/ _ \\\r\n" +
-  '  ___) | |_| | |_) | (_| | |_) | (_| \\__ \\  __/\r\n' +
-  ' |____/ \\__,_| .__/ \\__,_|_.__/ \\__,_|___/\\___|\r\n' +
-  '             |_|'
+  ' ____                    _                    \r\n' +
+  '/ ___| _   _ _ __   __ _| |__   __ _ ___  ___ \r\n' +
+  "\\___ \\| | | | '_ \\ /  ` | '_ \\ / _` / __|/ _ \\\r\n" +
+  ' ___) | |_| | |_) | (_| | |_) | (_| \\__ \\  __/\r\n' +
+  '|____/ \\__,_| .__/ \\__,_|_.__/ \\__,_|___/\\___|\r\n' +
+  '            |_|'
+
+const bg = chalk.bgRgb(50, 50, 50)
+const pad = '                                         '
 
 const BANNER =
   `\r\n${green(LOGO)}\r\n` +
-  `\r\n Tell your agent to run ${chalk.dim('ssh supabase.sh <command>')} to search the docs.\r\n` +
-  ' Or explore them yourself with grep, find, cat, and tree.\r\n\r\n'
+  `\r\nTell your agent to use ${chalk.dim('ssh supabase.sh <command>')} to search the docs:\r\n` +
+  `\r\n${bg(pad)}\r\n` +
+  `${bg(`  ${chalk.dim(`# Add to AGENTS.md (or CLAUDE.md)`)}      `)}\r\n` +
+  `${bg(`  $ ssh supabase.sh agents >> AGENTS.md  `)}\r\n` +
+  `${bg(pad)}\r\n\r\n` +
+  `Or explore them yourself with tree/grep/cat/etc:\r\n\r\n`
 
 export interface SSHServerOptions {
   hostKey: Buffer

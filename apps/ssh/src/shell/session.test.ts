@@ -1,7 +1,7 @@
 import { PassThrough } from 'node:stream'
 import { describe, it, expect, vi } from 'vitest'
 import { Bash } from 'just-bash'
-import { ShellSession, type ShellSessionOptions } from './shell-session.js'
+import { ShellSession, type ShellSessionOptions } from './session.js'
 
 const PROMPT_RE = /\$ $/
 

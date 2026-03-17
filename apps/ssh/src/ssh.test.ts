@@ -96,6 +96,14 @@ describe('SSH Server', () => {
       expect(stderr).toBe('err\n')
       expect(code).toBe(0)
     })
+
+    it('agents command outputs markdown', async () => {
+      const client = await connectClient()
+      const { stdout, code } = await execCommand(client, 'agents')
+      expect(code).toBe(0)
+      expect(stdout).toContain('## Supabase Docs')
+      expect(stdout).toContain('ssh supabase.sh')
+    })
   })
 
   describe('shell mode', () => {

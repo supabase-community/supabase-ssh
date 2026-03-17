@@ -1,0 +1,87 @@
+import { resolve } from 'node:path'
+import { Bash, defineCommand, OverlayFs } from 'just-bash'
+import { ExtendedMountableFs } from './extended-mountable-fs.js'
+
+const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
+
+const AGENTS_MD = `
+
+## Supabase Docs
+
+Before working on a Supabase feature, check the docs via \`ssh supabase.sh <command>\`.
+
+\`\`\`bash
+# Search for a topic
+ssh supabase.sh grep -rl 'auth' /supabase/docs/
+
+# Read a specific guide
+ssh supabase.sh cat /supabase/docs/guides/auth/passwords.md
+
+# Find all guides in a section
+ssh supabase.sh find /supabase/docs/guides/database -name '*.md'
+
+# Search with context
+ssh supabase.sh grep -r 'RLS' /supabase/docs/guides/auth --include='*.md' -l
+\`\`\`
+
+All docs live under \`/supabase/docs/\` as markdown files. You can use any standard Unix tools (grep, find, cat, etc.) to search and read them.
+`
+
+const aliasCommands = [
+  defineCommand('ll', (args, ctx) => ctx.exec!(`ls -alF ${args.join(' ')}`, { cwd: ctx.cwd })),
+  defineCommand('la', (args, ctx) => ctx.exec!(`ls -a ${args.join(' ')}`, { cwd: ctx.cwd })),
+  defineCommand('l', (args, ctx) => ctx.exec!(`ls -CF ${args.join(' ')}`, { cwd: ctx.cwd })),
+]
+
+const agentsCommand = defineCommand('agents', async () => ({
+  stdout: AGENTS_MD,
+  stderr: '',
+  exitCode: 0,
+}))
+
+const sshCommand = defineCommand('ssh', async (args) => {
+  const cmd = args.join(' ')
+  const hint = cmd === 'supabase.sh agents' ? ' >> AGENTS.md' : ''
+  return {
+    stdout: '',
+    stderr:
+      'ssh is not available from within this session.\n' +
+      'Exit first, then run:\n\n' +
+      `  ssh ${cmd}${hint}\n\n`,
+    exitCode: 1,
+  }
+})
+
+/**
+ * Creates a sandboxed Bash instance.
+ * @param docsDir - Path to docs directory to mount. Defaults to DOCS_DIR env or ../docs/public/docs.
+ */
+export function createBash(docsDir = DEFAULT_DOCS_DIR) {
+  return new Bash({
+    fs: new ExtendedMountableFs({
+      readOnly: true,
+      mounts: [
+        {
+          mountPoint: '/supabase/docs',
+          filesystem: new OverlayFs({ root: docsDir, mountPoint: '/', readOnly: true }),
+        },
+      ],
+    }),
+    cwd: '/supabase',
+    customCommands: [...aliasCommands, agentsCommand, sshCommand],
+    defenseInDepth: true,
+    executionLimits: {
+      maxCommandCount: 1000,
+      maxLoopIterations: 1000,
+      maxAwkIterations: 1000,
+      maxSedIterations: 1000,
+      maxJqIterations: 1000,
+      maxGlobOperations: 10000,
+      maxArrayElements: 10000,
+      maxBraceExpansionResults: 1000,
+      maxOutputSize: 1024 * 1024, // 1MB
+      maxStringLength: 1024 * 1024, // 1MB
+      maxHeredocSize: 1024 * 1024, // 1MB
+    },
+  })
+}
