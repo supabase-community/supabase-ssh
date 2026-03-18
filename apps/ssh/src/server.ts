@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 import { serve } from '@hono/node-server'
 
-import { app } from './http.js'
+import { createMetricsServer } from './metrics.js'
 import { createSSHServer } from './ssh.js'
 import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 
@@ -48,7 +48,11 @@ async function main() {
 
   await srv.listen()
 
-  const httpServer = serve({ fetch: app.fetch, port: METRICS_PORT }, (info) => {
+  const metricsApp = createMetricsServer({
+    getActiveConnections: () => srv.activeConnectionCount,
+  })
+
+  const httpServer = serve({ fetch: metricsApp.fetch, port: METRICS_PORT }, (info) => {
     console.log(`HTTP server listening on port ${info.port} (/metrics, /healthz)`)
   })
 

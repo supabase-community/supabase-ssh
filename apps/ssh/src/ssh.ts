@@ -5,11 +5,12 @@ import { Chalk } from 'chalk'
 import ssh2, { type ServerChannel } from 'ssh2'
 
 import {
-  decConnections,
+  decActiveConnections,
+  incActiveConnections,
   incCommands,
   incCommandTimeouts,
   incConnectionRejections,
-  incConnections,
+  incSessions,
   observeCommandDuration,
   observeSessionDuration,
 } from './metrics.js'
@@ -100,10 +101,12 @@ export function createSSHServer(opts: SSHServerOptions) {
     (client, info) => {
       const channels = new Set<ServerChannel>()
       activeClients.set(client, channels)
+      incActiveConnections()
 
       const sessionCtx = createSessionContext(info)
       const sessionStartTime = Date.now()
       let sessionMode: 'exec' | 'shell' = 'exec'
+      let sessionCounted = false
       let endReason = 'user_exit'
 
       if (activeClients.size >= softLimit) {
@@ -118,6 +121,7 @@ export function createSSHServer(opts: SSHServerOptions) {
           )
           recordConnectionRejected(sessionCtx, activeClients.size, dropProbability)
           incConnectionRejections()
+          decActiveConnections()
           activeClients.delete(client)
           client.end()
           return
@@ -164,7 +168,8 @@ export function createSSHServer(opts: SSHServerOptions) {
           session.on('exec', async (accept, _reject, execInfo) => {
             sessionCtx.mode = 'exec'
             sessionMode = 'exec'
-            incConnections('exec')
+            sessionCounted = true
+            incSessions('exec')
             resetIdle()
             const channel = accept()
             channels.add(channel)
@@ -210,7 +215,8 @@ export function createSSHServer(opts: SSHServerOptions) {
           session.on('shell', async (accept) => {
             sessionCtx.mode = 'shell'
             sessionMode = 'shell'
-            incConnections('shell')
+            sessionCounted = true
+            incSessions('shell')
             const channel = accept()
             activeChannel = channel
             channels.add(channel)
@@ -263,9 +269,11 @@ export function createSSHServer(opts: SSHServerOptions) {
         clearTimeout(idleTimer)
         clearTimeout(sessionTimer)
         activeClients.delete(client)
-        decConnections()
-        const reason = isShuttingDown ? 'server_shutdown' : endReason
-        observeSessionDuration((Date.now() - sessionStartTime) / 1000, sessionMode, reason)
+        decActiveConnections()
+        if (sessionCounted) {
+          const reason = isShuttingDown ? 'server_shutdown' : endReason
+          observeSessionDuration((Date.now() - sessionStartTime) / 1000, sessionMode, reason)
+        }
       })
       client.on('error', (err) => console.error('Client error:', err.message))
     }
@@ -273,6 +281,10 @@ export function createSSHServer(opts: SSHServerOptions) {
 
   return {
     server,
+
+    get activeConnectionCount() {
+      return activeClients.size
+    },
 
     listen(): Promise<number> {
       return new Promise((resolve) => {

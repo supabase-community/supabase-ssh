@@ -1,3 +1,4 @@
+import { Hono } from 'hono'
 import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from 'prom-client'
 
 const register = new Registry()
@@ -8,7 +9,7 @@ collectDefaultMetrics({ register })
 
 const activeConnections = new Gauge({
   name: 'ssh_active_connections',
-  help: 'Current number of open SSH connections',
+  help: 'Current number of TCP-level SSH connections',
   registers: [register],
 })
 
@@ -41,9 +42,9 @@ const memoryExternalBytes = new Gauge({
 
 // --- Counters (monotonic) ---
 
-const connectionsTotal = new Counter({
-  name: 'ssh_connections_total',
-  help: 'Total SSH connections',
+const sessionsTotal = new Counter({
+  name: 'ssh_sessions_total',
+  help: 'Total SSH sessions (exec or shell)',
   labelNames: ['mode'] as const,
   registers: [register],
 })
@@ -92,15 +93,16 @@ const sessionDurationSeconds = new Histogram({
 
 // --- Helper functions ---
 
-export function incConnections(mode: 'exec' | 'shell') {
-  activeConnectionCount++
+export function incActiveConnections() {
   activeConnections.inc()
-  connectionsTotal.inc({ mode })
 }
 
-export function decConnections() {
-  activeConnectionCount--
+export function decActiveConnections() {
   activeConnections.dec()
+}
+
+export function incSessions(mode: 'exec' | 'shell') {
+  sessionsTotal.inc({ mode })
 }
 
 export function incConnectionRejections() {
@@ -127,12 +129,22 @@ export function observeSessionDuration(seconds: number, mode: string, endReason:
   sessionDurationSeconds.observe({ mode, end_reason: endReason }, seconds)
 }
 
-let activeConnectionCount = 0
+/** Creates an internal HTTP server for /metrics and /healthz. */
+export function createMetricsServer(opts: { getActiveConnections: () => number }) {
+  const app = new Hono()
 
-export function getActiveConnectionCount(): number {
-  return activeConnectionCount
-}
+  app.get('/metrics', async (c) => {
+    const metrics = await register.metrics()
+    return c.text(metrics, 200, { 'Content-Type': register.contentType })
+  })
 
-export function getRegistry(): Registry {
-  return register
+  app.get('/healthz', (c) => {
+    return c.json({
+      status: 'ok',
+      activeConnections: opts.getActiveConnections(),
+      uptimeSeconds: Math.floor(process.uptime()),
+    })
+  })
+
+  return app
 }

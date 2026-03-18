@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { Client } from 'ssh2'
 import { createSSHServer } from './ssh.js'
-import { app } from './http.js'
+import { createMetricsServer } from './metrics.js'
 
 const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
   type: 'pkcs1',
@@ -16,6 +16,7 @@ const docsDir = mkdtempSync(join(tmpdir(), 'ssh-test-docs-'))
 
 let port: number
 let srv: ReturnType<typeof createSSHServer>
+let metricsApp: ReturnType<typeof createMetricsServer>
 const clients: Client[] = []
 
 beforeAll(async () => {
@@ -27,6 +28,9 @@ beforeAll(async () => {
     hardLimit: 10,
     execTimeout: 5000,
     docsDir,
+  })
+  metricsApp = createMetricsServer({
+    getActiveConnections: () => srv.activeConnectionCount,
   })
   port = await srv.listen()
 })
@@ -510,7 +514,7 @@ describe('SSH Server', () => {
 
   describe('HTTP endpoints', () => {
     it('/healthz returns status and active connections', async () => {
-      const res = await app.request('/healthz')
+      const res = await metricsApp.request('/healthz')
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.status).toBe('ok')
@@ -523,7 +527,7 @@ describe('SSH Server', () => {
       const client = await connectClient()
       await execCommand(client, 'echo metrics-test')
 
-      const res = await app.request('/metrics')
+      const res = await metricsApp.request('/metrics')
       expect(res.status).toBe(200)
       const text = await res.text()
       expect(res.headers.get('content-type')).toContain('text/plain')
