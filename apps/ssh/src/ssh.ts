@@ -130,7 +130,7 @@ export function createSSHServer(opts: SSHServerOptions) {
         console.log(`Client ${reason}, disconnecting`)
         endReason = reason === 'idle timeout' ? 'idle_timeout' : 'max_timeout'
         if (activeChannel) {
-          activeChannel.stderr.write(
+          activeChannel.write(
             `\r\n\r\n${green('Session timed out. Reconnect by running: ssh supabase.sh')}\r\n\r\n`
           )
         }
@@ -313,7 +313,7 @@ export function createSSHServer(opts: SSHServerOptions) {
         if (timedOut) {
           for (const [, channels] of activeClients) {
             for (const channel of channels) {
-              if (message) channel.stderr.write(message)
+              if (message) channel.write(message)
               channel.exit(255)
             }
           }

@@ -260,24 +260,24 @@ describe('SSH Server', () => {
     it('disconnects idle clients with timeout message', async () => {
       const client = await connectClient()
 
-      const result = await new Promise<{ disconnected: boolean; stderr: string }>((resolve) => {
-        const timer = setTimeout(() => resolve({ disconnected: false, stderr: '' }), 10_000)
-        let stderr = ''
+      const result = await new Promise<{ disconnected: boolean; stdout: string }>((resolve) => {
+        const timer = setTimeout(() => resolve({ disconnected: false, stdout: '' }), 10_000)
+        let stdout = ''
         client.on('close', () => {
           clearTimeout(timer)
-          resolve({ disconnected: true, stderr })
+          resolve({ disconnected: true, stdout })
         })
         // Open a shell but don't send anything - let idle timeout fire
         client.shell((err, stream) => {
           if (err) return
-          stream.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString()
+          stream.on('data', (data: Buffer) => {
+            stdout += data.toString()
           })
         })
       })
 
       expect(result.disconnected).toBe(true)
-      expect(result.stderr).toContain('Session timed out')
+      expect(result.stdout).toContain('Session timed out')
     }, 10_000)
 
     it('disconnects after max session timeout with message', async () => {
@@ -298,18 +298,18 @@ describe('SSH Server', () => {
         client.connect({ host: '127.0.0.1', port: shortPort, username: 'test', password: 'ignored' })
       })
 
-      const result = await new Promise<{ disconnected: boolean; stderr: string }>((resolve) => {
-        const timer = setTimeout(() => resolve({ disconnected: false, stderr: '' }), 10_000)
-        let stderr = ''
+      const result = await new Promise<{ disconnected: boolean; stdout: string }>((resolve) => {
+        const timer = setTimeout(() => resolve({ disconnected: false, stdout: '' }), 10_000)
+        let stdout = ''
         client.on('close', () => {
           clearTimeout(timer)
-          resolve({ disconnected: true, stderr })
+          resolve({ disconnected: true, stdout })
         })
         // Keep sending data - idle timeout won't fire, but max session should
         client.shell((err, stream) => {
           if (err) return
-          stream.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString()
+          stream.on('data', (data: Buffer) => {
+            stdout += data.toString()
           })
           const keepAlive = setInterval(() => stream.write('echo ping\n'), 100)
           stream.on('close', () => clearInterval(keepAlive))
@@ -317,7 +317,7 @@ describe('SSH Server', () => {
       })
 
       expect(result.disconnected).toBe(true)
-      expect(result.stderr).toContain('Session timed out')
+      expect(result.stdout).toContain('Session timed out')
       await shortSrv.close()
     }, 10_000)
 
@@ -339,14 +339,14 @@ describe('SSH Server', () => {
         client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
       })
 
-      const result = await new Promise<{ stderr: string; code: number | null; elapsed: number }>(
+      const result = await new Promise<{ stdout: string; code: number | null; elapsed: number }>(
         (resolve, reject) => {
           client.exec('sleep 10', (err, stream) => {
             if (err) return reject(err)
-            let stderr = ''
+            let stdout = ''
             let exitCode: number | null = null
-            stream.stderr.on('data', (data: Buffer) => {
-              stderr += data.toString()
+            stream.on('data', (data: Buffer) => {
+              stdout += data.toString()
             })
             stream.on('exit', (code: number | null) => {
               exitCode = code
@@ -354,7 +354,7 @@ describe('SSH Server', () => {
             // stream.on('close') may not fire when connection ends abruptly
             const closeStart = Date.now()
             client.on('close', () =>
-              resolve({ stderr, code: exitCode, elapsed: Date.now() - closeStart })
+              resolve({ stdout, code: exitCode, elapsed: Date.now() - closeStart })
             )
 
             // Give the command a moment to start, then trigger shutdown
@@ -366,7 +366,7 @@ describe('SSH Server', () => {
         }
       )
 
-      expect(result.stderr).toContain('Server is shutting down')
+      expect(result.stdout).toContain('Server is shutting down')
       expect(result.code).toBe(255)
       // Disconnected after drain timeout, not immediately and not after full sleep 10
       expect(result.elapsed).toBeGreaterThanOrEqual(drainTimeout * 0.8)
@@ -391,21 +391,17 @@ describe('SSH Server', () => {
         client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
       })
 
-      const result = await new Promise<{ stderr: string; code: number; elapsed: number }>(
+      const result = await new Promise<{ stdout: string; code: number; elapsed: number }>(
         (resolve, reject) => {
           client.shell((err, stream) => {
             if (err) return reject(err)
             let stdout = ''
-            let stderr = ''
             let closeStart = 0
             stream.on('data', (data: Buffer) => {
               stdout += data.toString()
             })
-            stream.stderr.on('data', (data: Buffer) => {
-              stderr += data.toString()
-            })
             stream.on('close', (code: number) =>
-              resolve({ stderr, code, elapsed: Date.now() - closeStart })
+              resolve({ stdout, code, elapsed: Date.now() - closeStart })
             )
 
             // Wait for prompt, then trigger shutdown
@@ -422,7 +418,7 @@ describe('SSH Server', () => {
         }
       )
 
-      expect(result.stderr).toContain('Server is shutting down')
+      expect(result.stdout).toContain('Server is shutting down')
       expect(result.code).toBe(255)
       // Disconnected after drain timeout, not immediately
       expect(result.elapsed).toBeGreaterThanOrEqual(drainTimeout * 0.8)
@@ -484,17 +480,13 @@ describe('SSH Server', () => {
         client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
       })
 
-      // Run a fast command and collect any stderr (shutdown message)
-      let stderr = ''
+      // Run a fast command
       const execDone = new Promise<{ stdout: string; code: number }>((resolve, reject) => {
         client.exec('echo fast', (err, stream) => {
           if (err) return reject(err)
           let stdout = ''
           stream.on('data', (data: Buffer) => {
             stdout += data.toString()
-          })
-          stream.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString()
           })
           stream.on('close', (code: number) => resolve({ stdout, code }))
         })
@@ -511,8 +503,8 @@ describe('SSH Server', () => {
       client.end()
       await closePromise
 
-      // Should NOT have received the shutdown notification
-      expect(stderr).toBe('')
+      // Should NOT have received the shutdown notification (only command output)
+      expect(result.stdout).not.toContain('Should not see this')
     }, 10_000)
   })
 
