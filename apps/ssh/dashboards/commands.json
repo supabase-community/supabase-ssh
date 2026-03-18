@@ -1,0 +1,177 @@
+{
+  "uid": "supabase-ssh-commands",
+  "title": "Supabase SSH / Command Analytics",
+  "description": "What commands people run, how fast, how often they fail",
+  "tags": ["ssh", "commands"],
+  "timezone": "utc",
+  "editable": true,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "app",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(ssh_active_connections, app)",
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(ssh_active_connections{app=~\"$app\"}, instance)",
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Top Commands",
+      "type": "table",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "topk(20, sum by (command) (increase(ssh_commands_total{app=~\"$app\", instance=~\"$instance\"}[$__range])))",
+          "legendFormat": "{{ command }}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "renameByName": { "command": "Command", "Value": "Count" }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Count" },
+            "properties": [{ "id": "custom.align", "value": "right" }]
+          }
+        ]
+      },
+      "options": { "sortBy": [{ "displayName": "Count", "desc": true }] }
+    },
+    {
+      "id": 2,
+      "title": "Exec vs Shell Split",
+      "type": "piechart",
+      "gridPos": { "h": 10, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum by (mode) (increase(ssh_sessions_total{app=~\"$app\", instance=~\"$instance\"}[$__range]))",
+          "legendFormat": "{{ mode }}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Error vs Success",
+      "type": "piechart",
+      "gridPos": { "h": 10, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(increase(ssh_command_errors_total{app=~\"$app\", instance=~\"$instance\"}[$__range]))",
+          "legendFormat": "errors"
+        },
+        {
+          "expr": "sum(increase(ssh_commands_total{app=~\"$app\", instance=~\"$instance\"}[$__range])) - sum(increase(ssh_command_errors_total{app=~\"$app\", instance=~\"$instance\"}[$__range]))",
+          "legendFormat": "success"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Command Rate by Name",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (command) (rate(ssh_commands_total{app=~\"$app\", instance=~\"$instance\"}[5m])))",
+          "legendFormat": "{{ command }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Error Rate by Command",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (command) (rate(ssh_commands_total{app=~\"$app\", instance=~\"$instance\", exit_code!=\"0\"}[5m])))",
+          "legendFormat": "{{ command }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "cps", "custom": { "fillOpacity": 20 } }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Command Duration Heatmap",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(increase(ssh_command_duration_seconds_bucket{app=~\"$app\", instance=~\"$instance\"}[$__rate_interval])) by (le)",
+          "legendFormat": "{{ le }}",
+          "format": "heatmap"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "yAxis": { "unit": "s" },
+        "color": { "scheme": "Oranges" }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Timeouts Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(ssh_command_timeouts_total{app=~\"$app\", instance=~\"$instance\"}[5m]))",
+          "legendFormat": "timeouts/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "cps", "custom": { "fillOpacity": 20, "drawStyle": "bars" } }
+      }
+    }
+  ],
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
+  "schemaVersion": 39
+}
