@@ -13,33 +13,6 @@ const activeConnections = new Gauge({
   registers: [register],
 })
 
-const memoryRssBytes = new Gauge({
-  name: 'ssh_memory_rss_bytes',
-  help: 'Process RSS in bytes',
-  registers: [register],
-  collect() {
-    memoryRssBytes.set(process.memoryUsage().rss)
-  },
-})
-
-const memoryHeapUsedBytes = new Gauge({
-  name: 'ssh_memory_heap_used_bytes',
-  help: 'V8 heap used in bytes',
-  registers: [register],
-  collect() {
-    memoryHeapUsedBytes.set(process.memoryUsage().heapUsed)
-  },
-})
-
-const memoryExternalBytes = new Gauge({
-  name: 'ssh_memory_external_bytes',
-  help: 'V8 external memory (Buffers) in bytes',
-  registers: [register],
-  collect() {
-    memoryExternalBytes.set(process.memoryUsage().external)
-  },
-})
-
 // --- Counters (monotonic) ---
 
 const sessionsTotal = new Counter({

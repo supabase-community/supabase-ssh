@@ -534,7 +534,7 @@ describe('SSH Server', () => {
       expect(text).toContain('ssh_commands_total')
       expect(text).toContain('ssh_active_connections')
       expect(text).toContain('ssh_command_duration_seconds')
-      expect(text).toContain('ssh_memory_rss_bytes')
+      expect(text).toContain('process_resident_memory_bytes')
     })
   })
 })
