@@ -25,7 +25,7 @@ Writes to `keys/host_key`. The `keys/` directory is gitignored.
 **3. Start the server:**
 
 ```bash
-docker compose up
+pnpm dev
 ```
 
 The server listens on port 22.
@@ -77,6 +77,49 @@ fly secrets set LOGFLARE_SOURCE="<source-uuid>" LOGFLARE_API_KEY="<api-key>" --a
 ```
 
 Exports OTel spans to Logflare via OTLP protobuf. Without these secrets, telemetry is silently disabled.
+
+**Rate limiting (optional):**
+
+Create a Fly Redis (Upstash) database (one per environment, shared across instances):
+
+```bash
+fly redis create
+# Follow the prompts to name it (e.g. supabase-ssh-redis) and select a region
+# Outputs the REST URL and token
+```
+
+Set the credentials on the SSH app:
+
+```bash
+fly secrets set UPSTASH_REDIS_REST_URL="<url>" UPSTASH_REDIS_REST_TOKEN="<token>" --app <app>
+```
+
+Without these secrets, rate limiting is silently disabled. Per-instance connection limits still apply.
+
+Optionally tune the limits (defaults: 30 connections/IP per 60s window):
+
+```bash
+fly secrets set RATE_LIMIT_MAX=30 RATE_LIMIT_WINDOW_SECONDS=60 --app <app>
+```
+
+For local development, `docker compose up -d` starts a Redis + Upstash-compatible REST proxy. Add to `.env.local`:
+
+```
+UPSTASH_REDIS_REST_URL=http://localhost:8079
+UPSTASH_REDIS_REST_TOKEN=local_token
+```
+
+To test with low thresholds:
+
+```
+RATE_LIMIT_MAX=3
+RATE_LIMIT_WINDOW_SECONDS=10
+```
+
+```bash
+ssh localhost echo 1 && ssh localhost echo 2 && ssh localhost echo 3 && ssh localhost echo 4
+# 4th connection returns: "Too many connections. Retry in Xs."
+```
 
 **Deploy:**
 

@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { Client } from 'ssh2'
 import { createSSHServer } from './ssh.js'
 import { createMetricsServer } from './metrics.js'
+import type { RateLimiter } from './ratelimit.js'
 
 const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
   type: 'pkcs1',
@@ -510,6 +511,98 @@ describe('SSH Server', () => {
       // Should NOT have received the shutdown notification (only command output)
       expect(result.stdout).not.toContain('Should not see this')
     }, 10_000)
+  })
+
+  describe('rate limiting', () => {
+    it('rejects exec with rate limit message when limited', async () => {
+      const rateLimiter: RateLimiter = {
+        limit: async () => ({ success: false, reset: Date.now() + 30_000 }),
+      }
+      const rlSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        execTimeout: 5000,
+        docsDir,
+        rateLimiter,
+      })
+      const rlPort = await rlSrv.listen()
+
+      const client = new Client()
+      clients.push(client)
+      await new Promise<void>((resolve, reject) => {
+        client.on('ready', () => resolve()).on('error', reject)
+        client.connect({ host: '127.0.0.1', port: rlPort, username: 'test', password: 'ignored' })
+      })
+
+      const { stderr, code } = await execCommand(client, 'echo hello')
+      expect(stderr).toContain('Too many connections')
+      expect(stderr).toContain('Retry in')
+      expect(code).toBe(1)
+
+      client.end()
+      await rlSrv.close()
+    })
+
+    it('allows exec when rate limit passes', async () => {
+      const rateLimiter: RateLimiter = {
+        limit: async () => ({ success: true, reset: 0 }),
+      }
+      const rlSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        execTimeout: 5000,
+        docsDir,
+        rateLimiter,
+      })
+      const rlPort = await rlSrv.listen()
+
+      const client = new Client()
+      clients.push(client)
+      await new Promise<void>((resolve, reject) => {
+        client.on('ready', () => resolve()).on('error', reject)
+        client.connect({ host: '127.0.0.1', port: rlPort, username: 'test', password: 'ignored' })
+      })
+
+      const { stdout, code } = await execCommand(client, 'echo hello')
+      expect(stdout).toBe('hello\n')
+      expect(code).toBe(0)
+
+      client.end()
+      await rlSrv.close()
+    })
+
+    it('fails open when rate limiter throws', async () => {
+      const rateLimiter: RateLimiter = {
+        limit: async () => {
+          throw new Error('Redis connection failed')
+        },
+      }
+      const rlSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        execTimeout: 5000,
+        docsDir,
+        rateLimiter,
+      })
+      const rlPort = await rlSrv.listen()
+
+      const client = new Client()
+      clients.push(client)
+      await new Promise<void>((resolve, reject) => {
+        client.on('ready', () => resolve()).on('error', reject)
+        client.connect({ host: '127.0.0.1', port: rlPort, username: 'test', password: 'ignored' })
+      })
+
+      const { stdout, code } = await execCommand(client, 'echo hello')
+      expect(stdout).toBe('hello\n')
+      expect(code).toBe(0)
+
+      client.end()
+      await rlSrv.close()
+    })
   })
 
   describe('HTTP endpoints', () => {

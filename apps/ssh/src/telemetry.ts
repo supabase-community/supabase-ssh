@@ -135,6 +135,19 @@ export function endCommandSpan(
   span.end()
 }
 
+/** Record a rate-limited connection as a self-contained span. */
+export function recordRateLimited(ctx: SessionContext, retryInSeconds: number): void {
+  const tracer = trace.getTracer(TRACER_NAME)
+  const span = tracer.startSpan('ssh.connection.rate_limited', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      ...sessionAttributes(ctx),
+      'ssh.rate_limit.retry_in_seconds': retryInSeconds,
+    },
+  })
+  span.end()
+}
+
 /** Record a rejected connection as a self-contained span. */
 export function recordConnectionRejected(
   ctx: SessionContext,

@@ -10,16 +10,19 @@ import {
   incCommands,
   incCommandTimeouts,
   incConnectionRejections,
+  incRateLimitRejections,
   incSessions,
   observeCommandDuration,
   observeSessionDuration,
 } from './metrics.js'
+import type { RateLimiter } from './ratelimit.js'
 import { createBash } from './shell/bash.js'
 import { createShellSession } from './shell/session.js'
 import {
   createSessionContext,
   endCommandSpan,
   recordConnectionRejected,
+  recordRateLimited,
   startCommandSpan,
 } from './telemetry.js'
 
@@ -66,6 +69,8 @@ export interface SSHServerOptions {
   hardLimit?: number
   /** Root directory for docs content. */
   docsDir?: string
+  /** Optional per-IP rate limiter (requires Redis). */
+  rateLimiter?: RateLimiter
 }
 
 /** Creates a testable SSH server. Call listen() to start, close() to stop. */
@@ -79,6 +84,7 @@ export function createSSHServer(opts: SSHServerOptions) {
     softLimit = 80,
     hardLimit = 100,
     docsDir,
+    rateLimiter,
   } = opts
 
   const activeClients = new Map<ssh2.Connection, Set<ServerChannel>>()
@@ -108,6 +114,26 @@ export function createSSHServer(opts: SSHServerOptions) {
       let sessionMode: 'exec' | 'shell' = 'exec'
       let sessionCounted = false
       let endReason = 'user_exit'
+
+      // Start rate limit check early - runs in parallel with SSH handshake
+      const rateLimitResult = rateLimiter
+        ? rateLimiter.limit(info.ip).catch(() => ({ success: true, reset: 0 }))
+        : null
+
+      /** Writes a rate limit message to the channel and closes it. Returns true if blocked. */
+      async function applyRateLimit(channel: ServerChannel): Promise<boolean> {
+        if (!rateLimitResult) return false
+        const { success, reset } = await rateLimitResult
+        if (success) return false
+
+        incRateLimitRejections()
+        const retryIn = Math.max(1, Math.ceil((reset - Date.now()) / 1000))
+        recordRateLimited(sessionCtx, retryIn)
+        channel.stderr.write(`Too many connections. Retry in ${retryIn}s.\r\n`)
+        channel.exit(1)
+        channel.end()
+        return true
+      }
 
       if (activeClients.size >= softLimit) {
         const dropProbability =
@@ -174,6 +200,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             const channel = accept()
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
+            if (await applyRateLimit(channel)) return
             const command = execInfo.command
             console.log(`exec: ${command}`)
 
@@ -221,6 +248,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             activeChannel = channel
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
+            if (await applyRateLimit(channel)) return
 
             channel.on('data', () => resetIdle())
 

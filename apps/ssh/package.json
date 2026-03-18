@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.24.0",
   "scripts": {
     "start": "tsx src/server.ts",
-    "dev": "tsx watch --env-file=.env.local src/server.ts",
+    "dev": "touch .env.local && tsx watch --env-file=.env.local src/server.ts",
     "generate:host-key": "tsx scripts/generate-host-key.ts",
     "generate:host-key:local": "tsx scripts/generate-host-key.ts > ssh_host_key",
     "deploy:prod": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh",
@@ -19,6 +19,8 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.36.4",
     "chalk": "^5.4.1",
     "hono": "^4.12.7",
     "just-bash": "^2.11.15",

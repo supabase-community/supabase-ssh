@@ -1,11 +1,16 @@
 services:
-  docs-ssh:
-    build:
-      context: ../..
-      dockerfile: apps/ssh/Dockerfile
+  redis:
+    image: redis:7-alpine
     ports:
-      - "22:22"
-    volumes:
-      - ./keys:/app/keys
+      - "6379:6379"
+
+  redis-http:
+    image: hiett/serverless-redis-http:latest
+    ports:
+      - "8079:80"
     environment:
-      SSH_HOST_KEY_PATH: /app/keys/host_key
+      SRH_MODE: env
+      SRH_TOKEN: local_token
+      SRH_CONNECTION_STRING: redis://redis:6379
+    depends_on:
+      - redis

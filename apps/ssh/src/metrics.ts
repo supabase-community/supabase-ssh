@@ -28,6 +28,12 @@ const connectionRejectionsTotal = new Counter({
   registers: [register],
 })
 
+const rateLimitRejectionsTotal = new Counter({
+  name: 'ssh_rate_limit_rejections_total',
+  help: 'Connections rejected by per-IP rate limiting',
+  registers: [register],
+})
+
 const commandsTotal = new Counter({
   name: 'ssh_commands_total',
   help: 'Total commands executed',
@@ -80,6 +86,10 @@ export function incSessions(mode: 'exec' | 'shell') {
 
 export function incConnectionRejections() {
   connectionRejectionsTotal.inc()
+}
+
+export function incRateLimitRejections() {
+  rateLimitRejectionsTotal.inc()
 }
 
 export function incCommands(command: string, exitCode: number) {

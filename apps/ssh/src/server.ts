@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { serve } from '@hono/node-server'
 
 import { createMetricsServer } from './metrics.js'
+import { createRateLimiter } from './ratelimit.js'
 import { createSSHServer } from './ssh.js'
 import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 
@@ -15,6 +16,11 @@ const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT ?? '600000', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
 const DRAIN_TIMEOUT = parseInt(process.env.DRAIN_TIMEOUT ?? '15000', 10)
+
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL
+const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX ?? '30', 10)
+const RATE_LIMIT_WINDOW_SECONDS = parseInt(process.env.RATE_LIMIT_WINDOW_SECONDS ?? '60', 10)
 
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
@@ -36,6 +42,22 @@ async function main() {
   initTelemetry()
   const hostKey = await loadHostKey()
 
+  const rateLimiter =
+    UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN
+      ? createRateLimiter({
+          url: UPSTASH_REDIS_REST_URL,
+          token: UPSTASH_REDIS_REST_TOKEN,
+          maxRequests: RATE_LIMIT_MAX,
+          windowSeconds: RATE_LIMIT_WINDOW_SECONDS,
+        })
+      : undefined
+
+  if (rateLimiter) {
+    console.log(`Rate limiting enabled (${RATE_LIMIT_MAX} connections/${RATE_LIMIT_WINDOW_SECONDS}s per IP)`)
+  } else {
+    console.log('Rate limiting disabled (no UPSTASH_REDIS_REST_URL configured)')
+  }
+
   const srv = createSSHServer({
     hostKey,
     port: PORT,
@@ -44,6 +66,7 @@ async function main() {
     execTimeout: EXEC_TIMEOUT,
     softLimit: Math.floor(MAX_CONNECTIONS * 0.8),
     hardLimit: MAX_CONNECTIONS,
+    rateLimiter,
   })
 
   await srv.listen()
