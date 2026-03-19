@@ -5,6 +5,24 @@ import { ExtendedMountableFs } from './extended-mountable-fs.js'
 
 const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
 
+export const EXECUTION_LIMITS = {
+  maxCommandCount: 1000,
+  maxLoopIterations: 1000,
+  maxCallDepth: 50,
+  maxSubstitutionDepth: 20,
+  maxSourceDepth: 10,
+  maxFileDescriptors: 100,
+  maxAwkIterations: 1000,
+  maxSedIterations: 1000,
+  maxJqIterations: 1000,
+  maxGlobOperations: 10000,
+  maxArrayElements: 10000,
+  maxBraceExpansionResults: 1000,
+  maxOutputSize: 1024 * 1024, // 1MB
+  maxStringLength: 1024 * 1024, // 1MB
+  maxHeredocSize: 1024 * 1024, // 1MB
+}
+
 const AGENTS_MD = `
 
 ## Supabase Docs
@@ -71,19 +89,7 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
     },
     customCommands: [agentsCommand, sshCommand],
     defenseInDepth: true,
-    executionLimits: {
-      maxCommandCount: 1000,
-      maxLoopIterations: 1000,
-      maxAwkIterations: 1000,
-      maxSedIterations: 1000,
-      maxJqIterations: 1000,
-      maxGlobOperations: 10000,
-      maxArrayElements: 10000,
-      maxBraceExpansionResults: 1000,
-      maxOutputSize: 1024 * 1024, // 1MB
-      maxStringLength: 1024 * 1024, // 1MB
-      maxHeredocSize: 1024 * 1024, // 1MB
-    },
+    executionLimits: EXECUTION_LIMITS,
   })
 
   // Enable alias expansion
