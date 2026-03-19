@@ -192,20 +192,15 @@ describe('SSH Server', () => {
       const c1 = await connectTo(limitPort)
       const c2 = await connectTo(limitPort)
 
-      // Third connection should be rejected (at hard limit)
-      const rejected = await new Promise<boolean>((resolve) => {
-        const c3 = new Client()
-        clients.push(c3)
-        c3.on('ready', () => resolve(false))
-        c3.on('close', () => resolve(true))
-        c3.on('error', () => resolve(true))
-        c3.connect({ host: '127.0.0.1', port: limitPort, username: 'test', password: 'ignored' })
-      })
-
-      expect(rejected).toBe(true)
+      // Third connection should connect but reject exec with capacity message
+      const c3 = await connectTo(limitPort)
+      const result = await execCommand(c3, 'echo hi')
+      expect(result.stderr).toContain('Server is at capacity')
+      expect(result.code).toBe(1)
 
       c1.end()
       c2.end()
+      c3.end()
       await limitSrv.close()
     })
 
@@ -241,16 +236,10 @@ describe('SSH Server', () => {
       let accepted = 0
       let rejected = 0
       for (let i = 0; i < 20; i++) {
-        const result = await new Promise<'accepted' | 'rejected'>((resolve) => {
-          const client = new Client()
-          clients.push(client)
-          client.on('ready', () => resolve('accepted'))
-          client.on('close', () => resolve('rejected'))
-          client.on('error', () => resolve('rejected'))
-          client.connect({ host: '127.0.0.1', port: probPort, username: 'test', password: 'ignored' })
-        })
-        if (result === 'accepted') accepted++
-        else rejected++
+        const client = await connectTo(probPort)
+        const result = await execCommand(client, 'echo hi')
+        if (result.stderr.includes('Server is at capacity')) rejected++
+        else accepted++
       }
 
       // With a ramp from 3 to 13, we should see a mix - not all accepted, not all rejected

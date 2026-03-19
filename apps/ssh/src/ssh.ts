@@ -135,6 +135,9 @@ export function createSSHServer(opts: SSHServerOptions) {
         return true
       }
 
+      // Check capacity - if over limit, let the connection through but mark it
+      // for rejection once a channel is available so we can send a friendly message
+      let atCapacity = false
       if (activeClients.size >= softLimit) {
         const dropProbability =
           activeClients.size >= hardLimit
@@ -147,11 +150,17 @@ export function createSSHServer(opts: SSHServerOptions) {
           )
           recordConnectionRejected(sessionCtx, activeClients.size, dropProbability)
           incConnectionRejections()
-          decActiveConnections()
-          activeClients.delete(client)
-          client.end()
-          return
+          atCapacity = true
         }
+      }
+
+      /** Rejects with a capacity message if flagged. Returns true if rejected. */
+      function applyCapacityLimit(channel: ServerChannel): boolean {
+        if (!atCapacity) return false
+        channel.stderr.write('Server is at capacity. Try again in a moment.\r\n')
+        channel.exit(1)
+        channel.end()
+        return true
       }
 
       let activeChannel: ServerChannel | null = null
@@ -200,6 +209,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             const channel = accept()
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
+            if (applyCapacityLimit(channel)) return
             if (await applyRateLimit(channel)) return
             const command = execInfo.command
             console.log(`exec: ${command}`)
@@ -248,6 +258,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             activeChannel = channel
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
+            if (applyCapacityLimit(channel)) return
             if (await applyRateLimit(channel)) return
 
             channel.on('data', () => resetIdle())
