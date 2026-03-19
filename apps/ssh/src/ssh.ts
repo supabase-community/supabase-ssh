@@ -9,6 +9,7 @@ import {
   incActiveConnections,
   incCommands,
   incCommandTimeouts,
+  incConcurrencyRejections,
   incConnectionRejections,
   incRateLimitRejections,
   incSessions,
@@ -21,6 +22,7 @@ import { createShellSession } from './shell/session.js'
 import {
   createSessionContext,
   endCommandSpan,
+  recordConcurrencyLimited,
   recordConnectionRejected,
   recordRateLimited,
   startCommandSpan,
@@ -67,9 +69,15 @@ export interface SSHServerOptions {
   softLimit?: number
   /** All connections above this are rejected. */
   hardLimit?: number
+  /** Max concurrent connections from a single IP (in-memory, per instance). */
+  maxConnectionsPerIp?: number
   /** Root directory for docs content. */
   docsDir?: string
-  /** Optional per-IP rate limiter (requires Redis). */
+  /**
+   * Sliding-window rate limiter (Redis-backed, cluster-wide). Caps total connection
+   * opens per IP per window - prevents rapid connect/disconnect abuse. Complements
+   * maxConnectionsPerIp which caps concurrent connections per instance.
+   */
   rateLimiter?: RateLimiter
 }
 
@@ -83,11 +91,12 @@ export function createSSHServer(opts: SSHServerOptions) {
     execTimeout = 10_000,
     softLimit = 80,
     hardLimit = 100,
+    maxConnectionsPerIp = 10,
     docsDir,
     rateLimiter,
   } = opts
 
-  const activeClients = new Map<ssh2.Connection, Set<ServerChannel>>()
+  const activeClients = new Map<ssh2.Connection, { ip: string; channels: Set<ServerChannel> }>()
   let isShuttingDown = false
 
   const server = new Server(
@@ -106,7 +115,7 @@ export function createSSHServer(opts: SSHServerOptions) {
     },
     (client, info) => {
       const channels = new Set<ServerChannel>()
-      activeClients.set(client, channels)
+      activeClients.set(client, { ip: info.ip, channels })
       incActiveConnections()
 
       const sessionCtx = createSessionContext(info)
@@ -130,6 +139,22 @@ export function createSSHServer(opts: SSHServerOptions) {
         const retryIn = Math.max(1, Math.ceil((reset - Date.now()) / 1000))
         recordRateLimited(sessionCtx, retryIn)
         channel.stderr.write(`Too many connections. Retry in ${retryIn}s.\r\n`)
+        channel.exit(1)
+        channel.end()
+        return true
+      }
+
+      /** Rejects if this IP already has too many concurrent connections. Returns true if blocked. */
+      function applyConcurrencyLimit(channel: ServerChannel): boolean {
+        let count = 0
+        for (const [, entry] of activeClients) {
+          if (entry.ip === info.ip) count++
+        }
+        if (count <= maxConnectionsPerIp) return false
+
+        incConcurrencyRejections()
+        recordConcurrencyLimited(sessionCtx, count)
+        channel.stderr.write(`Too many concurrent connections. Disconnect a session and retry.\r\n`)
         channel.exit(1)
         channel.end()
         return true
@@ -210,6 +235,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
             if (applyCapacityLimit(channel)) return
+            if (applyConcurrencyLimit(channel)) return
             if (await applyRateLimit(channel)) return
             const command = execInfo.command
             console.log(`exec: ${command}`)
@@ -259,6 +285,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
             if (applyCapacityLimit(channel)) return
+            if (applyConcurrencyLimit(channel)) return
             if (await applyRateLimit(channel)) return
 
             channel.on('data', () => resetIdle())
@@ -362,7 +389,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
         // 3. If drain timed out, notify and force-disconnect remaining sessions
         if (timedOut) {
-          for (const [, channels] of activeClients) {
+          for (const [, { channels }] of activeClients) {
             for (const channel of channels) {
               if (message) channel.write(message)
               channel.exit(255)

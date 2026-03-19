@@ -502,6 +502,54 @@ describe('SSH Server', () => {
     }, 10_000)
   })
 
+  describe('per-IP concurrency limiting', () => {
+    it('rejects when IP exceeds max concurrent connections', async () => {
+      const concSrv = createSSHServer({
+        hostKey: Buffer.from(hostKey),
+        port: 0,
+        idleTimeout: 30_000,
+        execTimeout: 5000,
+        maxConnectionsPerIp: 2,
+        docsDir,
+      })
+      const concPort = await concSrv.listen()
+
+      const connectTo = (p: number) =>
+        new Promise<Client>((resolve, reject) => {
+          const client = new Client()
+          clients.push(client)
+          client
+            .on('ready', () => resolve(client))
+            .on('error', reject)
+            .connect({ host: '127.0.0.1', port: p, username: 'test', password: 'ignored' })
+        })
+
+      // Fill to the limit
+      const c1 = await connectTo(concPort)
+      const c2 = await connectTo(concPort)
+
+      // Third connection from same IP should be rejected
+      const c3 = await connectTo(concPort)
+      const result = await execCommand(c3, 'echo hi')
+      expect(result.stderr).toContain('Too many concurrent connections')
+      expect(result.code).toBe(1)
+
+      // After disconnecting two, a new connection should work (c3 still counts as a connection)
+      c1.end()
+      c3.end()
+      await new Promise((r) => setTimeout(r, 100))
+      const c4 = await connectTo(concPort)
+      const result2 = await execCommand(c4, 'echo hi')
+      expect(result2.stdout).toBe('hi\n')
+      expect(result2.code).toBe(0)
+
+      c2.end()
+      c3.end()
+      c4.end()
+      await concSrv.close()
+    })
+  })
+
   describe('rate limiting', () => {
     it('rejects exec with rate limit message when limited', async () => {
       const rateLimiter: RateLimiter = {

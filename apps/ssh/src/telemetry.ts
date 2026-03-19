@@ -148,6 +148,19 @@ export function recordRateLimited(ctx: SessionContext, retryInSeconds: number): 
   span.end()
 }
 
+/** Record a concurrency-limited connection as a self-contained span. */
+export function recordConcurrencyLimited(ctx: SessionContext, concurrentCount: number): void {
+  const tracer = trace.getTracer(TRACER_NAME)
+  const span = tracer.startSpan('ssh.connection.concurrency_limited', {
+    kind: SpanKind.SERVER,
+    attributes: {
+      ...sessionAttributes(ctx),
+      'ssh.concurrency.count': concurrentCount,
+    },
+  })
+  span.end()
+}
+
 /** Record a rejected connection as a self-contained span. */
 export function recordConnectionRejected(
   ctx: SessionContext,

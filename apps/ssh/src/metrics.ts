@@ -34,6 +34,12 @@ const rateLimitRejectionsTotal = new Counter({
   registers: [register],
 })
 
+const concurrencyRejectionsTotal = new Counter({
+  name: 'ssh_concurrency_rejections_total',
+  help: 'Connections rejected by per-IP concurrency limit',
+  registers: [register],
+})
+
 const commandsTotal = new Counter({
   name: 'ssh_commands_total',
   help: 'Total commands executed',
@@ -90,6 +96,10 @@ export function incConnectionRejections() {
 
 export function incRateLimitRejections() {
   rateLimitRejectionsTotal.inc()
+}
+
+export function incConcurrencyRejections() {
+  concurrencyRejectionsTotal.inc()
 }
 
 export function incCommands(command: string, exitCode: number) {
