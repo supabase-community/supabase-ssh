@@ -1,3 +1,4 @@
 node_modules/
 dist/
 ssh_host_key
+load-test/traces/*.json

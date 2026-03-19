@@ -10,7 +10,9 @@
     "generate:host-key:local": "tsx scripts/generate-host-key.ts > ssh_host_key",
     "deploy:prod": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh",
     "deploy:staging": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh-staging",
-    "test": "vitest run"
+    "test": "vitest run",
+    "load-test": "tsx load-test/cli.ts",
+    "load-test:parse-profile": "tsx load-test/scripts/parse-profile.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",

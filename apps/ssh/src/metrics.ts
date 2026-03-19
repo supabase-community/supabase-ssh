@@ -131,6 +131,14 @@ export function createMetricsServer(opts: { getActiveConnections: () => number }
     return c.text(metrics, 200, { 'Content-Type': register.contentType })
   })
 
+  app.post('/gc', (c) => {
+    if (typeof globalThis.gc === 'function') {
+      globalThis.gc()
+      return c.json({ triggered: true })
+    }
+    return c.json({ triggered: false }, 501)
+  })
+
   app.get('/healthz', (c) => {
     return c.json({
       status: 'ok',

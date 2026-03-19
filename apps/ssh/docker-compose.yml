@@ -14,3 +14,26 @@ services:
       SRH_CONNECTION_STRING: redis://redis:6379
     depends_on:
       - redis
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    volumes:
+      - ./load-test/otel-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./load-test/traces:/traces
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.101.0
+    volumes:
+      - ./load-test/victoriametrics-scrape.yaml:/etc/victoriametrics/promscrape.yaml
+      - victoriametrics-data:/victoria-metrics-data
+    ports:
+      - "8428:8428"
+    command:
+      - "-promscrape.config=/etc/victoriametrics/promscrape.yaml"
+      - "-retentionPeriod=30d"
+
+volumes:
+  victoriametrics-data:

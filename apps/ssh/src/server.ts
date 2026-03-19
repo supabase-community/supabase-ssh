@@ -15,6 +15,7 @@ const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '60000', 10)
 const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT ?? '600000', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
+const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP ?? '10', 10)
 const DRAIN_TIMEOUT = parseInt(process.env.DRAIN_TIMEOUT ?? '15000', 10)
 
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL
@@ -66,6 +67,7 @@ async function main() {
     execTimeout: EXEC_TIMEOUT,
     softLimit: Math.floor(MAX_CONNECTIONS * 0.8),
     hardLimit: MAX_CONNECTIONS,
+    maxConnectionsPerIp: MAX_CONNECTIONS_PER_IP,
     rateLimiter,
   })
 

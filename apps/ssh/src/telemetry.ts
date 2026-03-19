@@ -11,28 +11,40 @@ const TRACER_NAME = pkg.name
 
 let provider: BasicTracerProvider | null = null
 
-/** Initialize OTel tracing. No-op if LOGFLARE_SOURCE/LOGFLARE_API_KEY are not set. */
+/**
+ * Initialize OTel tracing.
+ *
+ * - With LOGFLARE_SOURCE + LOGFLARE_API_KEY: exports to Logflare (prod/staging)
+ * - With OTEL_EXPORTER_OTLP_ENDPOINT: exports to that endpoint (local collector)
+ * - With neither: no-op
+ */
 export function initTelemetry(): void {
   const source = process.env.LOGFLARE_SOURCE
   const apiKey = process.env.LOGFLARE_API_KEY
+  const hasLogflare = source && apiKey
+  const hasOtelEndpoint = !!process.env.OTEL_EXPORTER_OTLP_ENDPOINT
 
   if (process.env.OTEL_LOG_LEVEL) {
     const level = DiagLogLevel[process.env.OTEL_LOG_LEVEL.toUpperCase() as keyof typeof DiagLogLevel]
     diag.setLogger(new DiagConsoleLogger(), level ?? DiagLogLevel.INFO)
   }
 
-  if (!source || !apiKey) {
-    console.log('[telemetry] disabled - LOGFLARE_SOURCE or LOGFLARE_API_KEY not set')
+  if (!hasLogflare && !hasOtelEndpoint) {
+    console.log('[telemetry] disabled - set LOGFLARE_SOURCE/LOGFLARE_API_KEY or OTEL_EXPORTER_OTLP_ENDPOINT')
     return
   }
 
-  const exporter = new OTLPTraceExporter({
-    url: 'https://otel.logflare.app/v1/traces',
-    headers: {
-      'x-source': source,
-      'x-api-key': apiKey,
-    },
-  })
+  // When Logflare vars are set, use the Logflare endpoint with auth headers.
+  // Otherwise, let OTLPTraceExporter read OTEL_EXPORTER_OTLP_ENDPOINT automatically.
+  const exporter = hasLogflare
+    ? new OTLPTraceExporter({
+        url: 'https://otel.logflare.app/v1/traces',
+        headers: {
+          'x-source': source,
+          'x-api-key': apiKey,
+        },
+      })
+    : new OTLPTraceExporter()
 
   provider = new BasicTracerProvider({
     resource: resourceFromAttributes({
@@ -46,7 +58,8 @@ export function initTelemetry(): void {
   })
 
   trace.setGlobalTracerProvider(provider)
-  console.log('[telemetry] initialized - exporting to Logflare')
+  const dest = hasLogflare ? 'Logflare' : process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+  console.log(`[telemetry] initialized - exporting to ${dest}`)
 }
 
 /** Flush pending spans and shut down. */
