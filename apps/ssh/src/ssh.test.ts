@@ -59,6 +59,31 @@ function connectClient(): Promise<Client> {
   })
 }
 
+/** Connect and handle auth-phase rejection via USERAUTH_BANNER + disconnect. */
+function connectWithBanner(
+  p: number
+): Promise<{ client: Client; rejected: boolean; banner?: string }> {
+  return new Promise((resolve) => {
+    const client = new Client()
+    clients.push(client)
+    let bannerText = ''
+    client
+      .on('banner', (msg: string) => {
+        bannerText += msg
+      })
+      .on('ready', () => resolve({ client, rejected: false }))
+      .on('close', () => {
+        // Server sends banner then disconnects for rejected clients
+        if (bannerText) resolve({ client, rejected: true, banner: bannerText })
+      })
+      .on('error', () => {
+        // Also handle error-based rejection (e.g. auth failure)
+        if (bannerText) resolve({ client, rejected: true, banner: bannerText })
+      })
+      .connect({ host: '127.0.0.1', port: p, username: 'test', password: 'ignored' })
+  })
+}
+
 function execCommand(
   client: Client,
   command: string
@@ -179,75 +204,64 @@ describe('SSH Server', () => {
       })
       const limitPort = await limitSrv.listen()
 
-      const connectTo = (p: number) =>
-        new Promise<Client>((resolve, reject) => {
-          const client = new Client()
-          clients.push(client)
-          client
-            .on('ready', () => resolve(client))
-            .on('error', reject)
-            .connect({ host: '127.0.0.1', port: p, username: 'test', password: 'ignored' })
-        })
+      const r1 = await connectWithBanner(limitPort)
+      const r2 = await connectWithBanner(limitPort)
+      expect(r1.rejected).toBe(false)
+      expect(r2.rejected).toBe(false)
 
-      const c1 = await connectTo(limitPort)
-      const c2 = await connectTo(limitPort)
+      // Third connection should be rejected at auth with capacity banner
+      const r3 = await connectWithBanner(limitPort)
+      expect(r3.rejected).toBe(true)
+      expect(r3.banner).toContain('Server is at capacity')
 
-      // Third connection should connect but reject exec with capacity message
-      const c3 = await connectTo(limitPort)
-      const result = await execCommand(c3, 'echo hi')
-      expect(result.stderr).toContain('Server is at capacity')
-      expect(result.code).toBe(1)
-
-      c1.end()
-      c2.end()
-      c3.end()
+      r1.client.end()
+      r2.client.end()
+      r3.client.end()
       await limitSrv.close()
     })
 
     it('probabilistically drops connections between soft and hard limit', async () => {
-      // softLimit=3, hardLimit=13 gives a wide ramp (10 slots)
-      // Fill to softLimit-1 (2 connections), then attempt 20 more.
-      // With linear ramp, some should be accepted and some rejected.
+      // softLimit=3, hardLimit=50 gives a very wide ramp.
+      // Hold 8 connections: p = (8-3)/(50-3) ≈ 11%. With 50 attempts,
+      // we expect ~6 rejections and ~44 accepts - definitely a mix.
       const probSrv = createSSHServer({
         hostKey: Buffer.from(hostKey),
         port: 0,
         idleTimeout: 30_000,
         softLimit: 3,
-        hardLimit: 13,
+        hardLimit: 50,
         execTimeout: 5000,
         docsDir,
       })
       const probPort = await probSrv.listen()
 
-      const connectTo = (p: number) =>
-        new Promise<Client>((resolve, reject) => {
-          const client = new Client()
-          clients.push(client)
-          client
-            .on('ready', () => resolve(client))
-            .on('error', reject)
-            .connect({ host: '127.0.0.1', port: p, username: 'test', password: 'ignored' })
-        })
-
-      // Fill 2 slots (below soft limit, always accepted)
-      const baseline = await Promise.all([connectTo(probPort), connectTo(probPort)])
-
-      // Attempt 20 more connections in the ramp zone
-      let accepted = 0
-      let rejected = 0
-      for (let i = 0; i < 20; i++) {
-        const client = await connectTo(probPort)
-        const result = await execCommand(client, 'echo hi')
-        if (result.stderr.includes('Server is at capacity')) rejected++
-        else accepted++
+      // Fill 8 slots (above soft limit to be in the ramp zone)
+      const held: Client[] = []
+      for (let i = 0; i < 8; i++) {
+        const r = await connectWithBanner(probPort)
+        if (!r.rejected) held.push(r.client)
       }
 
-      // With a ramp from 3 to 13, we should see a mix - not all accepted, not all rejected
+      // Attempt connections and count outcomes
+      let accepted = 0
+      let rejected = 0
+      for (let i = 0; i < 50; i++) {
+        const r = await connectWithBanner(probPort)
+        if (r.rejected) {
+          rejected++
+        } else {
+          accepted++
+          r.client.end()
+          // Allow cleanup before next attempt
+          await new Promise((resolve) => setTimeout(resolve, 10))
+        }
+      }
+
+      // Should see a mix - not all accepted, not all rejected
       expect(accepted).toBeGreaterThan(0)
       expect(rejected).toBeGreaterThan(0)
 
-      for (const c of baseline) c.end()
-      for (const c of clients) c.end()
+      for (const c of held) c.end()
       await probSrv.close()
     })
 
@@ -514,44 +528,35 @@ describe('SSH Server', () => {
       })
       const concPort = await concSrv.listen()
 
-      const connectTo = (p: number) =>
-        new Promise<Client>((resolve, reject) => {
-          const client = new Client()
-          clients.push(client)
-          client
-            .on('ready', () => resolve(client))
-            .on('error', reject)
-            .connect({ host: '127.0.0.1', port: p, username: 'test', password: 'ignored' })
-        })
-
       // Fill to the limit
-      const c1 = await connectTo(concPort)
-      const c2 = await connectTo(concPort)
+      const r1 = await connectWithBanner(concPort)
+      const r2 = await connectWithBanner(concPort)
+      expect(r1.rejected).toBe(false)
+      expect(r2.rejected).toBe(false)
 
-      // Third connection from same IP should be rejected
-      const c3 = await connectTo(concPort)
-      const result = await execCommand(c3, 'echo hi')
-      expect(result.stderr).toContain('Too many concurrent connections')
-      expect(result.code).toBe(1)
+      // Third connection from same IP should be rejected at auth
+      const r3 = await connectWithBanner(concPort)
+      expect(r3.rejected).toBe(true)
+      expect(r3.banner).toContain('Too many concurrent connections')
 
-      // After disconnecting two, a new connection should work (c3 still counts as a connection)
-      c1.end()
-      c3.end()
+      // After disconnecting, a new connection should work
+      r1.client.end()
+      r3.client.end()
       await new Promise((r) => setTimeout(r, 100))
-      const c4 = await connectTo(concPort)
-      const result2 = await execCommand(c4, 'echo hi')
+      const r4 = await connectWithBanner(concPort)
+      expect(r4.rejected).toBe(false)
+      const result2 = await execCommand(r4.client, 'echo hi')
       expect(result2.stdout).toBe('hi\n')
       expect(result2.code).toBe(0)
 
-      c2.end()
-      c3.end()
-      c4.end()
+      r2.client.end()
+      r4.client.end()
       await concSrv.close()
     })
   })
 
   describe('rate limiting', () => {
-    it('rejects exec with rate limit message when limited', async () => {
+    it('rejects at auth with rate limit banner when limited', async () => {
       const rateLimiter: RateLimiter = {
         limit: async () => ({ success: false, reset: Date.now() + 30_000 }),
       }
@@ -565,19 +570,12 @@ describe('SSH Server', () => {
       })
       const rlPort = await rlSrv.listen()
 
-      const client = new Client()
-      clients.push(client)
-      await new Promise<void>((resolve, reject) => {
-        client.on('ready', () => resolve()).on('error', reject)
-        client.connect({ host: '127.0.0.1', port: rlPort, username: 'test', password: 'ignored' })
-      })
+      const r = await connectWithBanner(rlPort)
+      expect(r.rejected).toBe(true)
+      expect(r.banner).toContain('Too many connections')
+      expect(r.banner).toContain('Retry in')
 
-      const { stderr, code } = await execCommand(client, 'echo hello')
-      expect(stderr).toContain('Too many connections')
-      expect(stderr).toContain('Retry in')
-      expect(code).toBe(1)
-
-      client.end()
+      r.client.end()
       await rlSrv.close()
     })
 

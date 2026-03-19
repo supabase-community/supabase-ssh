@@ -30,6 +30,48 @@ import {
 
 const { Server } = ssh2
 
+/** ssh2 Protocol internals needed for sending raw packets. */
+interface SSH2Protocol {
+  _packetRW: {
+    write: {
+      allocStart: number
+      alloc(size: number): Buffer
+      finalize(packet: Buffer): Buffer
+    }
+  }
+  _cipher: { encrypt(packet: Buffer): void }
+}
+
+/** Type guard for ssh2 AuthContext._protocol. */
+function getProtocol(ctx: unknown): SSH2Protocol {
+  const proto = (ctx as { _protocol?: unknown })._protocol
+  if (!proto || typeof proto !== 'object' || !('_packetRW' in proto) || !('_cipher' in proto)) {
+    throw new Error('ssh2 internals changed - _protocol._packetRW/_cipher no longer available')
+  }
+  return proto as SSH2Protocol
+}
+
+/**
+ * Send a USERAUTH_BANNER packet to a client during the auth phase.
+ * This is the SSH-standard way to display a message before auth completes.
+ * Visible to OpenSSH CLI, ssh2 clients ('banner' event), and other SSH clients.
+ *
+ * Note: Uses ssh2 protocol internals since there's no public API for per-connection banners.
+ */
+function sendAuthBanner(protocol: SSH2Protocol, message: string): void {
+  const text = message.endsWith('\r\n') ? message : `${message}\r\n`
+  const textLen = Buffer.byteLength(text)
+  let p = protocol._packetRW.write.allocStart
+  const packet = protocol._packetRW.write.alloc(1 + 4 + textLen + 4)
+
+  packet[p] = 53 // SSH_MSG_USERAUTH_BANNER
+  packet.writeUInt32BE(textLen, ++p)
+  packet.write(text, (p += 4), textLen, 'utf8')
+  packet.writeUInt32BE(0, (p += textLen)) // Empty language tag
+
+  protocol._cipher.encrypt(protocol._packetRW.write.finalize(packet))
+}
+
 // Force truecolor - output goes to SSH channels, not stdout
 const chalk = new Chalk({ level: 3 })
 const green = chalk.rgb(62, 207, 142)
@@ -129,65 +171,6 @@ export function createSSHServer(opts: SSHServerOptions) {
         ? rateLimiter.limit(info.ip).catch(() => ({ success: true, reset: 0 }))
         : null
 
-      /** Writes a rate limit message to the channel and closes it. Returns true if blocked. */
-      async function applyRateLimit(channel: ServerChannel): Promise<boolean> {
-        if (!rateLimitResult) return false
-        const { success, reset } = await rateLimitResult
-        if (success) return false
-
-        incRateLimitRejections()
-        const retryIn = Math.max(1, Math.ceil((reset - Date.now()) / 1000))
-        recordRateLimited(sessionCtx, retryIn)
-        channel.stderr.write(`Too many connections. Retry in ${retryIn}s.\r\n`)
-        channel.exit(1)
-        channel.end()
-        return true
-      }
-
-      /** Rejects if this IP already has too many concurrent connections. Returns true if blocked. */
-      function applyConcurrencyLimit(channel: ServerChannel): boolean {
-        let count = 0
-        for (const [, entry] of activeClients) {
-          if (entry.ip === info.ip) count++
-        }
-        if (count <= maxConnectionsPerIp) return false
-
-        incConcurrencyRejections()
-        recordConcurrencyLimited(sessionCtx, count)
-        channel.stderr.write(`Too many concurrent connections. Disconnect a session and retry.\r\n`)
-        channel.exit(1)
-        channel.end()
-        return true
-      }
-
-      // Check capacity - if over limit, let the connection through but mark it
-      // for rejection once a channel is available so we can send a friendly message
-      let atCapacity = false
-      if (activeClients.size >= softLimit) {
-        const dropProbability =
-          activeClients.size >= hardLimit
-            ? 1
-            : (activeClients.size - softLimit) / (hardLimit - softLimit)
-
-        if (Math.random() < dropProbability) {
-          console.warn(
-            `Rejecting connection: ${activeClients.size} active (soft=${softLimit} hard=${hardLimit} p=${dropProbability.toFixed(2)})`
-          )
-          recordConnectionRejected(sessionCtx, activeClients.size, dropProbability)
-          incConnectionRejections()
-          atCapacity = true
-        }
-      }
-
-      /** Rejects with a capacity message if flagged. Returns true if rejected. */
-      function applyCapacityLimit(channel: ServerChannel): boolean {
-        if (!atCapacity) return false
-        channel.stderr.write('Server is at capacity. Try again in a moment.\r\n')
-        channel.exit(1)
-        channel.end()
-        return true
-      }
-
       let activeChannel: ServerChannel | null = null
 
       const endSession = (reason: string) => {
@@ -207,7 +190,67 @@ export function createSSHServer(opts: SSHServerOptions) {
         idleTimer.refresh()
       }
 
-      client.on('authentication', (ctx) => ctx.accept())
+      /** Sends a banner and disconnects. Used by limit checks below. */
+      function reject(proto: SSH2Protocol, message: string): void {
+        sendAuthBanner(proto, message)
+        client.end()
+      }
+
+      /** Probabilistic capacity check. Returns true if rejected. */
+      function rejectIfAtCapacity(proto: SSH2Protocol): boolean {
+        if (activeClients.size < softLimit) return false
+        const dropProbability =
+          activeClients.size >= hardLimit
+            ? 1
+            : (activeClients.size - softLimit) / (hardLimit - softLimit)
+        if (Math.random() >= dropProbability) return false
+
+        console.warn(
+          `Rejecting connection: ${activeClients.size} active (soft=${softLimit} hard=${hardLimit} p=${dropProbability.toFixed(2)})`
+        )
+        recordConnectionRejected(sessionCtx, activeClients.size, dropProbability)
+        incConnectionRejections()
+        reject(proto, 'Server is at capacity. Try again in a moment.')
+        return true
+      }
+
+      /** Per-IP concurrency check. Returns true if rejected. */
+      function rejectIfOverIpLimit(proto: SSH2Protocol): boolean {
+        let ipCount = 0
+        for (const [, entry] of activeClients) {
+          if (entry.ip === info.ip) ipCount++
+        }
+        if (ipCount <= maxConnectionsPerIp) return false
+
+        incConcurrencyRejections()
+        recordConcurrencyLimited(sessionCtx, ipCount)
+        reject(proto, 'Too many concurrent connections. Disconnect a session and retry.')
+        return true
+      }
+
+      /** Redis-backed sliding window rate limit. Returns true if rejected. */
+      async function rejectIfRateLimited(proto: SSH2Protocol): Promise<boolean> {
+        if (!rateLimitResult) return false
+        const { success, reset } = await rateLimitResult
+        if (success) return false
+
+        incRateLimitRejections()
+        const retryIn = Math.max(1, Math.ceil((reset - Date.now()) / 1000))
+        recordRateLimited(sessionCtx, retryIn)
+        reject(proto, `Too many connections. Retry in ${retryIn}s.`)
+        return true
+      }
+
+      // All limit checks run during auth - rejected clients never reach a channel.
+      // Rejection messages are sent as SSH USERAUTH_BANNER packets (RFC 4252 s5.4),
+      // visible to OpenSSH CLI, ssh2 clients, and other standard SSH clients.
+      client.on('authentication', async (ctx) => {
+        const proto = getProtocol(ctx)
+        if (rejectIfAtCapacity(proto)) return
+        if (rejectIfOverIpLimit(proto)) return
+        if (await rejectIfRateLimited(proto)) return
+        ctx.accept()
+      })
 
       client.on('handshake', (negotiated) => {
         sessionCtx.negotiatedKex = negotiated.kex
@@ -234,9 +277,6 @@ export function createSSHServer(opts: SSHServerOptions) {
             const channel = accept()
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
-            if (applyCapacityLimit(channel)) return
-            if (applyConcurrencyLimit(channel)) return
-            if (await applyRateLimit(channel)) return
             const command = execInfo.command
             console.log(`exec: ${command}`)
 
@@ -284,9 +324,6 @@ export function createSSHServer(opts: SSHServerOptions) {
             activeChannel = channel
             channels.add(channel)
             channel.on('close', () => channels.delete(channel))
-            if (applyCapacityLimit(channel)) return
-            if (applyConcurrencyLimit(channel)) return
-            if (await applyRateLimit(channel)) return
 
             channel.on('data', () => resetIdle())
 
