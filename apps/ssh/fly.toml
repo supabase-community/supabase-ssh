@@ -29,7 +29,16 @@ cpus = 1
 [[services]]
 protocol = "tcp"
 internal_port = 22
-soft_limit = 80
+
+# Concurrency thresholds are layered with app-level limits:
+#   Fly soft (50) → autoscale trigger (gives new machines time to start)
+#   App RED  (80) → probabilistic rejection begins (MAX_CONNECTIONS * 0.8)
+#   App hard (100) → 100% rejection with friendly message (MAX_CONNECTIONS)
+#   Fly hard (120) → last-resort backstop (app always owns rejection UX)
+concurrency_type = "connections"
+soft_limit = 50
+hard_limit = 120
+
 auto_stop_machines = true
 auto_start_machines = true
 min_machines_running = 1
