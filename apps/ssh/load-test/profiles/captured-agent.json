@@ -1,0 +1,54 @@
+{
+  "name": "captured-agent",
+  "description": "Captured from real agent session (12 commands)",
+  "commands": [
+    {
+      "command": "find /supabase/docs/guides/database -name *.md",
+      "offset": 0
+    },
+    {
+      "command": "cat /supabase/docs/guides/database/tables.md",
+      "offset": 14025
+    },
+    {
+      "command": "grep -r RLS\\|row level security /supabase/docs/guides/auth --include=*.md -l",
+      "offset": 14273
+    },
+    {
+      "command": "find /supabase/docs/guides -name *rls* -o -name *security*",
+      "offset": 16469
+    },
+    {
+      "command": "ls -la /supabase/docs/guides/api/",
+      "offset": 16686
+    },
+    {
+      "command": "cat /supabase/docs/guides/database/postgres/row-level-security.md",
+      "offset": 19185
+    },
+    {
+      "command": "cat /supabase/docs/guides/api/securing-your-api.md",
+      "offset": 19587
+    },
+    {
+      "command": "cat /supabase/docs/guides/api/sql-to-api.md",
+      "offset": 19695
+    },
+    {
+      "command": "cat /supabase/docs/guides/api/rest/overview.md",
+      "offset": 20211
+    },
+    {
+      "command": "ls /supabase/docs/guides/api/rest/",
+      "offset": 20250
+    },
+    {
+      "command": "cat /supabase/docs/guides/api/rest/overview.md",
+      "offset": 22032
+    },
+    {
+      "command": "cat /supabase/docs/guides/api/quickstart.md",
+      "offset": 22069
+    }
+  ]
+}

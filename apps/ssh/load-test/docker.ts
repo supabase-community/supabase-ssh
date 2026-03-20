@@ -1,5 +1,6 @@
-import { generateKeyPairSync } from 'node:crypto'
 import { execSync, execFileSync } from 'node:child_process'
+import { generateKeyPairSync } from 'node:crypto'
+import { rmSync } from 'node:fs'
 
 const IMAGE_NAME = 'supabase-ssh-loadtest'
 const REPO_ROOT = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '')
@@ -43,6 +44,12 @@ export const presets = {
       ...overrides,
     },
   }),
+  /** Capture: vanilla server with OTel export to host collector */
+  capture: (): ServerConfig => ({
+    env: {
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://host.docker.internal:4318',
+    },
+  }),
 } as const
 
 let imageBuilt = false
@@ -59,11 +66,28 @@ export function buildImage(): void {
   console.log('Docker image built.')
 }
 
+/** Stop any leftover server containers from previous runs */
+function cleanupStaleContainers() {
+  try {
+    const stale = execFileSync(
+      'docker', ['ps', '-q', '--filter', 'label=supabase-ssh-loadtest'],
+      { encoding: 'utf-8' }
+    ).trim()
+    if (stale) {
+      console.log('Cleaning up stale server container...')
+      execSync(`docker stop ${stale}`, { stdio: 'pipe' })
+    }
+  } catch {
+    // Nothing to clean up
+  }
+}
+
 /** Start an SSH server container with the given config */
 export async function startServer(config: ServerConfig = {}): Promise<RunningServer> {
+  cleanupStaleContainers()
   buildImage()
 
-  const args = ['run', '--rm', '-d']
+  const args = ['run', '--rm', '-d', '--label', 'supabase-ssh-loadtest']
 
   // Port mapping: use specified ports or let Docker assign
   if (config.sshPort) {
@@ -131,6 +155,78 @@ function getHostPort(containerId: string, containerPort: number): number {
   const match = output.match(/:(\d+)$/)
   if (!match) throw new Error(`Could not parse port from: ${output}`)
   return parseInt(match[1], 10)
+}
+
+/** Ensure OTel collector is running (via docker compose). Idempotent. */
+export async function ensureOtelCollector(): Promise<void> {
+  try {
+    const res = await fetch('http://localhost:4318/v1/traces', { method: 'POST', body: '{}' })
+    // 4xx is fine - means it's listening
+    if (res.status < 500) return
+  } catch {
+    // Not running
+  }
+
+  console.log('Starting OTel collector...')
+  try {
+    execSync('docker compose up -d otel-collector', {
+      cwd: `${REPO_ROOT}/apps/ssh`,
+      stdio: 'pipe',
+    })
+  } catch {
+    // Port conflict from a previous run - check if it's actually healthy
+    try {
+      const res = await fetch('http://localhost:4318/v1/traces', { method: 'POST', body: '{}' })
+      if (res.status < 500) {
+        console.log('OTel collector already running.')
+        return
+      }
+    } catch {
+      // genuinely broken
+    }
+    throw new Error('Failed to start OTel collector - port 4318 may be in use by a non-compose container')
+  }
+
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('http://localhost:4318/v1/traces', { method: 'POST', body: '{}' })
+      if (res.status < 500) {
+        console.log('OTel collector ready.')
+        return
+      }
+    } catch {
+      // Not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  console.warn('OTel collector did not become ready - continuing without it')
+}
+
+/** Restart OTel collector with a fresh spans file. Deletes old spans and restarts the container. */
+export async function resetOtelCollector(): Promise<void> {
+  const spansPath = `${REPO_ROOT}/apps/ssh/load-test/traces/spans.json`
+  rmSync(spansPath, { force: true })
+
+  execSync('docker compose restart otel-collector', {
+    cwd: `${REPO_ROOT}/apps/ssh`,
+    stdio: 'pipe',
+  })
+
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('http://localhost:4318/v1/traces', { method: 'POST', body: '{}' })
+      if (res.status < 500) {
+        console.log('OTel collector restarted with fresh spans.')
+        return
+      }
+    } catch {
+      // Not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  console.warn('OTel collector did not become ready after restart')
 }
 
 /** Ensure VictoriaMetrics is running (via docker compose). Idempotent. */

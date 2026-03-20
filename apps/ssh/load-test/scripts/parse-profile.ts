@@ -1,12 +1,5 @@
-/**
- * Parse OTel collector JSON output into a SessionProfile.
- *
- * Usage: pnpm tsx load-test/scripts/parse-profile.ts [input] [output]
- *   input:  Path to collector spans JSON (default: load-test/traces/spans.json)
- *   output: Path to write profile (default: load-test/profiles/captured-agent.json)
- */
+/** Parse OTel collector JSONL output into a SessionProfile. */
 import { readFileSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import type { SessionProfile, CommandSpec } from '../profiles/types.js'
 
 interface OTLPSpan {
@@ -29,11 +22,8 @@ function getAttr(span: OTLPSpan, key: string): string | undefined {
   return attr?.value.stringValue ?? attr?.value.intValue
 }
 
-function main() {
-  const args = process.argv.slice(2)
-  const inputPath = resolve(args[0] ?? 'load-test/traces/spans.json')
-  const outputPath = resolve(args[1] ?? 'load-test/profiles/captured-agent.json')
-
+/** Parse spans JSONL into a SessionProfile and write to disk. */
+export function parseProfile(inputPath: string, outputPath: string): SessionProfile | null {
   console.log(`Reading spans from: ${inputPath}`)
 
   const raw = readFileSync(inputPath, 'utf-8')
@@ -54,50 +44,24 @@ function main() {
     }
   }
 
-  // Filter for ssh.command spans
+  // Filter for ssh.command spans, excluding 'agents' (setup command, not agent behavior)
   const commandSpans = allSpans
-    .filter((s) => s.name === 'ssh.command')
+    .filter((s) => s.name === 'ssh.command' && getAttr(s, 'ssh.command.text') !== 'agents')
     .sort((a, b) => BigInt(a.startTimeUnixNano) < BigInt(b.startTimeUnixNano) ? -1 : 1)
 
   if (commandSpans.length === 0) {
-    console.error('No ssh.command spans found in input')
-    process.exit(1)
+    console.warn('No ssh.command spans found in input')
+    return null
   }
 
-  // Group by session ID
-  const sessions = new Map<string, OTLPSpan[]>()
-  for (const span of commandSpans) {
-    const sessionId = getAttr(span, 'ssh.session.id') ?? 'unknown'
-    const existing = sessions.get(sessionId) ?? []
-    existing.push(span)
-    sessions.set(sessionId, existing)
-  }
+  console.log(`Found ${commandSpans.length} command spans`)
 
-  console.log(`Found ${commandSpans.length} command spans across ${sessions.size} sessions`)
-
-  // Pick the longest session
-  let bestSession: OTLPSpan[] = []
-  for (const spans of sessions.values()) {
-    if (spans.length > bestSession.length) {
-      bestSession = spans
-    }
-  }
-
-  // Convert to profile commands with think times
-  const commands: CommandSpec[] = []
-  for (let i = 0; i < bestSession.length; i++) {
-    const span = bestSession[i]
-    const commandText = getAttr(span, 'ssh.command.text') ?? ''
-
-    let thinkTimeMs = 0
-    if (i > 0) {
-      const prevEnd = BigInt(bestSession[i - 1].endTimeUnixNano)
-      const thisStart = BigInt(span.startTimeUnixNano)
-      thinkTimeMs = Math.max(0, Number((thisStart - prevEnd) / 1_000_000n))
-    }
-
-    commands.push({ command: commandText, thinkTimeMs })
-  }
+  // Convert to profile commands with offsets from session start
+  const sessionStart = BigInt(commandSpans[0].startTimeUnixNano)
+  const commands: CommandSpec[] = commandSpans.map((span) => ({
+    command: getAttr(span, 'ssh.command.text') ?? '',
+    offset: Number((BigInt(span.startTimeUnixNano) - sessionStart) / 1_000_000n),
+  }))
 
   const profile: SessionProfile = {
     name: 'captured-agent',
@@ -107,10 +71,9 @@ function main() {
 
   writeFileSync(outputPath, JSON.stringify(profile, null, 2) + '\n')
   console.log(`\nProfile written to: ${outputPath}`)
-  console.log(`Commands: ${commands.length}`)
   for (const cmd of commands) {
-    console.log(`  [+${cmd.thinkTimeMs}ms] ${cmd.command.slice(0, 80)}`)
+    console.log(`  [${(cmd.offset / 1000).toFixed(1)}s] ${cmd.command.slice(0, 80)}`)
   }
-}
 
-main()
+  return profile
+}

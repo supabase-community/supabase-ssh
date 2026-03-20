@@ -21,7 +21,7 @@ const EXPENSIVE_PROFILE = {
   name: 'expensive-grep',
   description: 'Heavy recursive grep across all docs',
   commands: [
-    { command: "grep -r 'authentication' /supabase/docs/", thinkTimeMs: 0 },
+    { command: "grep -r 'authentication' /supabase/docs/", offset: 0 },
   ],
 }
 

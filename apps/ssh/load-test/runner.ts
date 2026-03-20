@@ -112,12 +112,15 @@ async function runVU(
 
       collectors.connectTimes.push(connected.connectTimeMs)
 
-      // Replay profile commands
+      // Replay profile commands (offsets are ms from session start)
+      const vuStart = performance.now()
       for (const cmd of config.profile.commands) {
         if (stopSignal.stopped) break
 
-        if (cmd.thinkTimeMs > 0) {
-          await sleep(cmd.thinkTimeMs)
+        const elapsed = performance.now() - vuStart
+        const wait = cmd.offset - elapsed
+        if (wait > 0) {
+          await sleep(wait)
         }
         if (stopSignal.stopped) break
 

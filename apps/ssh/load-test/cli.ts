@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { SessionProfile } from './profiles/types.js'
 import { startServer, ensureVictoriaMetrics, presets, type RunningServer } from './docker.js'
@@ -29,34 +29,10 @@ const SCENARIOS = {
 
 type ScenarioName = keyof typeof SCENARIOS
 
-/** Default profile when no captured profile exists */
-const DEFAULT_PROFILE: SessionProfile = {
-  name: 'default-agent',
-  description: 'Simulated agent doc-search session',
-  commands: [
-    { command: "find /supabase/docs/guides -name '*.md' -type f", thinkTimeMs: 500 },
-    { command: "grep -rl 'auth' /supabase/docs/guides/", thinkTimeMs: 2000 },
-    { command: 'cat /supabase/docs/guides/auth/passwords.md', thinkTimeMs: 3000 },
-    { command: "grep -r 'RLS' /supabase/docs/guides/auth --include='*.md' -l", thinkTimeMs: 1500 },
-    { command: 'cat /supabase/docs/guides/auth/row-level-security.md', thinkTimeMs: 2000 },
-    { command: "grep -r 'policy' /supabase/docs/guides/auth/row-level-security.md -C 3", thinkTimeMs: 1000 },
-  ],
-}
-
 function loadProfile(profilePath?: string): SessionProfile {
-  if (profilePath) {
-    const content = readFileSync(profilePath, 'utf-8')
-    return JSON.parse(content)
-  }
-
-  // Try captured profile first
-  const capturedPath = resolve(import.meta.dirname, 'profiles/captured-agent.json')
-  if (existsSync(capturedPath)) {
-    const content = readFileSync(capturedPath, 'utf-8')
-    return JSON.parse(content)
-  }
-
-  return DEFAULT_PROFILE
+  const path = profilePath ?? resolve(import.meta.dirname, 'profiles/captured-agent.json')
+  const content = readFileSync(path, 'utf-8')
+  return JSON.parse(content)
 }
 
 function printUsage() {

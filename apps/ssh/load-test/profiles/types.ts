@@ -1,13 +1,13 @@
 export interface CommandSpec {
   /** The SSH command to execute */
   command: string
-  /** Simulated think time before this command (ms). 0 = fire immediately. */
-  thinkTimeMs: number
+  /** Milliseconds since session start to fire this command */
+  offset: number
 }
 
 export interface SessionProfile {
   name: string
   description: string
-  /** Ordered commands with inter-command timing */
+  /** Ordered commands with timing offsets from session start */
   commands: CommandSpec[]
 }
