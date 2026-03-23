@@ -49,8 +49,8 @@ export async function execute(opts: {
   const totalRejections =
     result.rejections.capacity + result.rejections.rateLimit + result.rejections.concurrency
   const errorRate =
-    result.successfulCommands + result.failedCommands > 0
-      ? result.failedCommands / (result.successfulCommands + result.failedCommands)
+    result.totalCommands > 0
+      ? result.serverErrors / result.totalCommands
       : 0
 
   const pass = totalRejections === 0 && errorRate < 0.01 && result.commandLatency.p95 < 2000

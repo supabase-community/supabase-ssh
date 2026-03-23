@@ -38,8 +38,13 @@ export interface LiveStats {
 export interface ScenarioResult {
   totalConnections: number
   successfulConnections: number
-  successfulCommands: number
-  failedCommands: number
+  totalCommands: number
+  /** Commands that completed (any exit code) */
+  completedCommands: number
+  /** SSH-level failures: connection drops, channel errors */
+  serverErrors: number
+  /** Commands that returned non-zero exit code (normal for grep, etc.) */
+  nonZeroExits: number
   rejections: { capacity: number; rateLimit: number; concurrency: number }
   connectLatency: LatencyStats
   commandLatency: LatencyStats
@@ -84,7 +89,8 @@ async function runVU(
   collectors: {
     connectTimes: number[]
     commandTimes: number[]
-    errors: number[]
+    serverErrors: number
+    nonZeroExits: number
     rejections: { capacity: number; rateLimit: number; concurrency: number }
     connections: number
     commands: number
@@ -129,15 +135,15 @@ async function runVU(
           collectors.commandTimes.push(result.commandTimeMs)
           collectors.commands++
           if (result.exitCode !== 0) {
-            collectors.errors.push(result.exitCode)
+            collectors.nonZeroExits++
           }
         } catch {
-          collectors.errors.push(-1)
+          collectors.serverErrors++
         }
       }
     } catch {
       // Connection error - count and retry
-      collectors.errors.push(-1)
+      collectors.serverErrors++
       await sleep(500)
     } finally {
       if (connected?.client) {
@@ -159,7 +165,8 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
   const collectors = {
     connectTimes: [] as number[],
     commandTimes: [] as number[],
-    errors: [] as number[],
+    serverErrors: 0,
+    nonZeroExits: 0,
     rejections: { capacity: 0, rateLimit: 0, concurrency: 0 },
     connections: 0,
     commands: 0,
@@ -187,7 +194,7 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
         activeVUs: vuPromises.length,
         totalConnections: collectors.connections,
         totalCommands: collectors.commands,
-        totalErrors: collectors.errors.length,
+        totalErrors: collectors.serverErrors,
         totalRejections:
           collectors.rejections.capacity +
           collectors.rejections.rateLimit +
@@ -243,8 +250,10 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
   return {
     totalConnections: collectors.connections,
     successfulConnections: collectors.connectTimes.length,
-    successfulCommands: collectors.commands - collectors.errors.length,
-    failedCommands: collectors.errors.length,
+    totalCommands: collectors.commands,
+    completedCommands: collectors.commands - collectors.serverErrors,
+    serverErrors: collectors.serverErrors,
+    nonZeroExits: collectors.nonZeroExits,
     rejections: { ...collectors.rejections },
     connectLatency: computeLatency(collectors.connectTimes),
     commandLatency: computeLatency(collectors.commandTimes),

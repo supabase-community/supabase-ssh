@@ -60,14 +60,14 @@ export async function execute(opts: {
       vus,
       commandLatency: result.commandLatency,
       connectLatency: result.connectLatency,
-      commands: result.successfulCommands + result.failedCommands,
-      errors: result.failedCommands,
+      commands: result.totalCommands,
+      errors: result.serverErrors,
       rejections: totalRejections,
       commandsPerSecond: result.commandsPerSecond,
     })
 
     console.log(
-      `    p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  p99=${result.commandLatency.p99.toFixed(0)}ms  errors=${result.failedCommands}  rejections=${totalRejections}`
+      `    p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  p99=${result.commandLatency.p99.toFixed(0)}ms  errors=${result.serverErrors}  rejections=${totalRejections}`
     )
   }
 

@@ -48,7 +48,7 @@ export function formatReport(result: ScenarioResult, opts: ReportOptions): strin
   // Commands
   lines.push('Commands:')
   lines.push(
-    `  Total: ${result.successfulCommands + result.failedCommands}  Successful: ${result.successfulCommands}  Failed: ${result.failedCommands}`
+    `  Total: ${result.totalCommands}  Completed: ${result.completedCommands}  Server Errors: ${result.serverErrors}  Non-zero Exits: ${result.nonZeroExits}`
   )
   lines.push(`  Throughput: ${result.commandsPerSecond.toFixed(2)} cmd/s`)
   lines.push('')
