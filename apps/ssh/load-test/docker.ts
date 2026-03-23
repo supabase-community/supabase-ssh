@@ -8,6 +8,8 @@ const REPO_ROOT = new URL('../../../', import.meta.url).pathname.replace(/\/$/, 
 export interface ServerConfig {
   /** Memory limit (e.g., '256m', '512m', '1g'). Omit for no limit. */
   memory?: string
+  /** CPU limit (e.g., '1', '0.5', '2'). Maps to Docker --cpus. Omit for no limit. */
+  cpus?: string
   /** Environment variables passed to the container */
   env?: Record<string, string>
   /** Host port for SSH (default: auto-assigned) */
@@ -27,8 +29,9 @@ export interface RunningServer {
 /** Presets for common load test configurations */
 export const presets = {
   /** Discovery: all limits disabled, no rate limiter */
-  discovery: (memory?: string): ServerConfig => ({
+  discovery: (memory?: string, cpus?: string): ServerConfig => ({
     memory,
+    cpus,
     env: {
       MAX_CONNECTIONS: '9999',
       MAX_CONNECTIONS_PER_IP: '9999',
@@ -104,6 +107,11 @@ export async function startServer(config: ServerConfig = {}): Promise<RunningSer
     args.push('--memory', config.memory)
     // Disable swap to get accurate OOM behavior
     args.push('--memory-swap', config.memory)
+  }
+
+  // CPU limit
+  if (config.cpus) {
+    args.push('--cpus', config.cpus)
   }
 
   // Expose GC so load tests can trigger it via POST /gc for accurate memory measurements

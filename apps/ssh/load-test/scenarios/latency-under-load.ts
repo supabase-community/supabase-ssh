@@ -18,7 +18,7 @@ export interface LatencyUnderLoadResult {
   inflectionPoint?: { vus: number; p95Ms: number }
 }
 
-const STEPS = [5, 10, 20, 40, 60, 80, 100, 120]
+const STEPS = [5, 10, 25, 50, 100, 200, 400]
 const STEP_DURATION_SECONDS = 60
 
 /**

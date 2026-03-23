@@ -84,16 +84,39 @@ export function connect(opts: ConnectionOptions): Promise<ConnectedClient> {
 }
 
 /** Execute a command on a connected client. Returns stdout, stderr, exit code, and timing. */
-export function exec(client: Client, command: string): Promise<{
+export function exec(client: Client, command: string, timeout = 30_000): Promise<{
   stdout: string
   stderr: string
   exitCode: number
   commandTimeMs: number
+  timedOut: boolean
 }> {
   return new Promise((resolve, reject) => {
     const start = performance.now()
+    let settled = false
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        resolve({
+          stdout: '',
+          stderr: '',
+          exitCode: -1,
+          commandTimeMs: performance.now() - start,
+          timedOut: true,
+        })
+      }
+    }, timeout)
+
     client.exec(command, (err, stream) => {
-      if (err) return reject(err)
+      if (err) {
+        if (!settled) {
+          settled = true
+          clearTimeout(timer)
+          reject(err)
+        }
+        return
+      }
       let stdout = ''
       let stderr = ''
       stream.on('data', (data: Buffer) => {
@@ -103,12 +126,17 @@ export function exec(client: Client, command: string): Promise<{
         stderr += data.toString()
       })
       stream.on('close', (code: number) => {
-        resolve({
-          stdout,
-          stderr,
-          exitCode: code,
-          commandTimeMs: performance.now() - start,
-        })
+        if (!settled) {
+          settled = true
+          clearTimeout(timer)
+          resolve({
+            stdout,
+            stderr,
+            exitCode: code,
+            commandTimeMs: performance.now() - start,
+            timedOut: false,
+          })
+        }
       })
     })
   })

@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto'
+import { Client } from 'ssh2'
 import { connect, exec, type ConnectedClient } from './ssh-client.js'
 import { scrapeMetrics, scrapeHealth, computeDeltas, type MetricsSnapshot } from './metrics-collector.js'
 import type { SessionProfile } from './profiles/types.js'
@@ -91,11 +92,13 @@ async function runVU(
     commandTimes: number[]
     serverErrors: number
     nonZeroExits: number
+    timeouts: number
     rejections: { capacity: number; rateLimit: number; concurrency: number }
     connections: number
     commands: number
   },
-  stopSignal: { stopped: boolean }
+  stopSignal: { stopped: boolean },
+  activeClients: Set<Client>
 ): Promise<void> {
   while (!stopSignal.stopped) {
     let connected: ConnectedClient | null = null
@@ -111,11 +114,11 @@ async function runVU(
         if (type === 'capacity') collectors.rejections.capacity++
         else if (type === 'rate_limit') collectors.rejections.rateLimit++
         else if (type === 'concurrency') collectors.rejections.concurrency++
-        // Brief backoff before retrying
         await sleep(1000)
         continue
       }
 
+      activeClients.add(connected.client)
       collectors.connectTimes.push(connected.connectTimeMs)
 
       // Replay profile commands (offsets are ms from session start)
@@ -132,10 +135,14 @@ async function runVU(
 
         try {
           const result = await exec(connected.client, cmd.command)
-          collectors.commandTimes.push(result.commandTimeMs)
           collectors.commands++
-          if (result.exitCode !== 0) {
-            collectors.nonZeroExits++
+          if (result.timedOut) {
+            collectors.timeouts++
+          } else {
+            collectors.commandTimes.push(result.commandTimeMs)
+            if (result.exitCode !== 0) {
+              collectors.nonZeroExits++
+            }
           }
         } catch {
           collectors.serverErrors++
@@ -147,6 +154,7 @@ async function runVU(
       await sleep(500)
     } finally {
       if (connected?.client) {
+        activeClients.delete(connected.client)
         connected.client.end()
         connected.client.destroy()
       }
@@ -161,12 +169,16 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
   const { vus, durationSeconds, rampUpSeconds = 0, metricsUrl } = config
   const stopSignal = { stopped: false }
 
+  // Track active clients for force cleanup
+  const activeClients = new Set<Client>()
+
   // Shared collectors across all VUs
   const collectors = {
     connectTimes: [] as number[],
     commandTimes: [] as number[],
     serverErrors: 0,
     nonZeroExits: 0,
+    timeouts: 0,
     rejections: { capacity: 0, rateLimit: 0, concurrency: 0 },
     connections: 0,
     commands: 0,
@@ -208,7 +220,7 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
   const rampDelayMs = rampUpSeconds > 0 ? (rampUpSeconds * 1000) / vus : 0
 
   for (let i = 0; i < vus; i++) {
-    vuPromises.push(runVU(config, collectors, stopSignal))
+    vuPromises.push(runVU(config, collectors, stopSignal, activeClients))
     if (rampDelayMs > 0 && i < vus - 1) {
       await sleep(rampDelayMs)
     }
@@ -223,11 +235,15 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
   // Signal VUs to stop
   stopSignal.stopped = true
 
-  // Wait for in-flight VUs to finish (with timeout)
+  // Wait for in-flight VUs to finish, then force-destroy stragglers
   await Promise.race([
     Promise.allSettled(vuPromises),
     sleep(10_000), // 10s grace period
   ])
+
+  // Force-destroy any connections still open after grace period
+  activeClients.forEach((client) => client.destroy())
+  activeClients.clear()
 
   if (progressTimer) clearInterval(progressTimer)
 

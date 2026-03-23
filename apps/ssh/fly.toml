@@ -22,7 +22,7 @@ kill_timeout = "30s"
 dockerfile = "Dockerfile"
 
 [[vm]]
-memory = "512mb"
+memory = "256mb"
 cpu_kind = "shared"
 cpus = 1
 
@@ -30,14 +30,22 @@ cpus = 1
 protocol = "tcp"
 internal_port = 22
 
-# Concurrency thresholds are layered with app-level limits:
-#   Fly soft (50) → autoscale trigger (gives new machines time to start)
+# Concurrency limits - two concerns, handled by different layers:
+#
+# Latency (autoscaling):
+#   Fly soft (30) → triggers autoscale (p95 ~2-3s, plenty of runway)
+#
+# Server survival (rejection):
 #   App RED  (80) → probabilistic rejection begins (MAX_CONNECTIONS * 0.8)
 #   App hard (100) → 100% rejection with friendly message (MAX_CONNECTIONS)
-#   Fly hard (120) → last-resort backstop (app always owns rejection UX)
+#   Fly hard (110) → last-resort backstop (app always owns rejection UX)
+#
+# For AI agents, "slow but working" always beats "fast rejection".
+# Autoscaling handles latency. App limits only fire to prevent server death
+# (error cascade starts at ~100-200 connections on shared CPU).
 concurrency_type = "connections"
-soft_limit = 50
-hard_limit = 120
+soft_limit = 30
+hard_limit = 110
 
 auto_stop_machines = true
 auto_start_machines = true

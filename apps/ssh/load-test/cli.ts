@@ -63,6 +63,7 @@ Options:
   --duration <s>        Override duration in seconds
   --docker              Spawn server in Docker (auto-configured per tier)
   --memory <limit>      Docker memory limit, e.g., 256m, 512m, 1g (implies --docker)
+  --cpus <n>            Docker CPU limit, e.g., 1, 0.5, 2 (implies --docker)
   --env <K=V>           Extra env var for Docker container (repeatable, implies --docker)
   --json                Output results as JSON
 `)
@@ -80,6 +81,7 @@ async function main() {
       duration: { type: 'string' },
       docker: { type: 'boolean', default: false },
       memory: { type: 'string' },
+      cpus: { type: 'string' },
       env: { type: 'string', multiple: true },
       json: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
@@ -101,7 +103,7 @@ async function main() {
   const profile = loadProfile(values.profile)
   const vus = values.vus ? parseInt(values.vus, 10) : undefined
   const duration = values.duration ? parseInt(values.duration, 10) : undefined
-  const useDocker = values.docker || !!values.memory || (values.env?.length ?? 0) > 0
+  const useDocker = values.docker || !!values.memory || !!values.cpus || (values.env?.length ?? 0) > 0
 
   let server: RunningServer | null = null
   let host = values.host!
@@ -120,7 +122,7 @@ async function main() {
     // Pick preset based on tier
     const isDiscovery = TIER1_SCENARIOS.has(scenarioName)
     const preset = isDiscovery
-      ? presets.discovery(values.memory)
+      ? presets.discovery(values.memory, values.cpus)
       : presets.validation(extraEnv)
 
     // Merge extra env on top of preset
@@ -130,8 +132,12 @@ async function main() {
     if (!isDiscovery && values.memory) {
       preset.memory = values.memory
     }
+    if (!isDiscovery && values.cpus) {
+      preset.cpus = values.cpus
+    }
 
-    console.log(`\nStarting Docker server (${isDiscovery ? 'discovery' : 'validation'} preset${values.memory ? `, ${values.memory} RAM` : ''})...`)
+    const constraints = [values.memory ? `${values.memory} RAM` : '', values.cpus ? `${values.cpus} CPU` : ''].filter(Boolean).join(', ')
+    console.log(`\nStarting Docker server (${isDiscovery ? 'discovery' : 'validation'} preset${constraints ? `, ${constraints}` : ''})...`)
     await ensureVictoriaMetrics()
     server = await startServer(preset)
     host = '127.0.0.1'
