@@ -22,8 +22,8 @@ kill_timeout = "30s"
 dockerfile = "Dockerfile"
 
 [[vm]]
-memory = "256mb"
-cpu_kind = "shared"
+memory = "2048mb"
+cpu_kind = "performance"
 cpus = 1
 
 [[services]]
@@ -33,19 +33,18 @@ internal_port = 22
 # Concurrency limits - two concerns, handled by different layers:
 #
 # Latency (autoscaling):
-#   Fly soft (30) → triggers autoscale (p95 ~2-3s, plenty of runway)
+#   Fly soft (25) - autoscale trigger per machine
 #
 # Server survival (rejection):
-#   App RED  (80) → probabilistic rejection begins (MAX_CONNECTIONS * 0.8)
-#   App hard (100) → 100% rejection with friendly message (MAX_CONNECTIONS)
-#   Fly hard (110) → last-resort backstop (app always owns rejection UX)
+#   App RED  (80)  - probabilistic rejection begins (MAX_CONNECTIONS * 0.8)
+#   App hard (100) - 100% rejection with friendly message (MAX_CONNECTIONS)
+#   Fly hard (120) - last-resort backstop (app always owns rejection UX)
 #
-# For AI agents, "slow but working" always beats "fast rejection".
-# Autoscaling handles latency. App limits only fire to prevent server death
-# (error cascade starts at ~100-200 connections on shared CPU).
+# performance-1x has dedicated CPU (no credit system). Soft limit can be
+# much higher than shared-cpu since there's no credit cliff to avoid.
 concurrency_type = "connections"
-soft_limit = 30
-hard_limit = 110
+soft_limit = 25
+hard_limit = 120
 
 auto_stop_machines = true
 auto_start_machines = true
@@ -68,5 +67,5 @@ type = "http"
 port = 9091
 path = "/healthz"
 interval = "10s"
-timeout = "2s"
+timeout = "5s"
 grace_period = "5s"
