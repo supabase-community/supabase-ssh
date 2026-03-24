@@ -13,10 +13,12 @@ export interface ScenarioConfig {
   metricsUrl?: string
   /** Number of virtual users */
   vus: number
-  /** Test duration in seconds */
+  /** Test duration in seconds (ramp-up + hold, excluding ramp-down) */
   durationSeconds: number
   /** Ramp-up time in seconds (0 = all VUs start at once) */
   rampUpSeconds?: number
+  /** Ramp-down time in seconds (0 = all VUs stop at once) */
+  rampDownSeconds?: number
   /** Session profile to replay */
   profile: SessionProfile
   /** Loop the profile for the test duration */
@@ -54,6 +56,7 @@ export interface ScenarioResult {
   metricsBefore?: MetricsSnapshot
   metricsAfter?: MetricsSnapshot
   metricDeltas?: Record<string, number>
+  errorSamples: { type: string; message: string; count: number }[]
 }
 
 export interface LatencyStats {
@@ -84,7 +87,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Run a single VU: connect, replay profile commands, disconnect */
+/** Run a single VU: for each command, connect/exec/disconnect (matches real agent behavior) */
 async function runVU(
   config: ScenarioConfig,
   collectors: {
@@ -98,40 +101,42 @@ async function runVU(
     commands: number
   },
   stopSignal: { stopped: boolean },
-  activeClients: Set<Client>
+  activeClients: Set<Client>,
+  activeVUCount: { value: number }
 ): Promise<void> {
+  activeVUCount.value++
+  try {
   while (!stopSignal.stopped) {
-    let connected: ConnectedClient | null = null
-    try {
-      connected = await connect({
-        host: config.host,
-        port: config.port,
-      })
-      collectors.connections++
+    // Replay profile commands - fresh SSH connection per command (like real agents)
+    const vuStart = performance.now()
+    for (const cmd of config.profile.commands) {
+      if (stopSignal.stopped) break
 
-      if (connected.rejected) {
-        const type = connected.rejectionType
-        if (type === 'capacity') collectors.rejections.capacity++
-        else if (type === 'rate_limit') collectors.rejections.rateLimit++
-        else if (type === 'concurrency') collectors.rejections.concurrency++
-        await sleep(1000)
-        continue
+      const elapsed = performance.now() - vuStart
+      const wait = cmd.offset - elapsed
+      if (wait > 0) {
+        await sleep(wait)
       }
+      if (stopSignal.stopped) break
 
-      activeClients.add(connected.client)
-      collectors.connectTimes.push(connected.connectTimeMs)
+      let connected: ConnectedClient | null = null
+      try {
+        connected = await connect({
+          host: config.host,
+          port: config.port,
+        })
+        collectors.connections++
 
-      // Replay profile commands (offsets are ms from session start)
-      const vuStart = performance.now()
-      for (const cmd of config.profile.commands) {
-        if (stopSignal.stopped) break
-
-        const elapsed = performance.now() - vuStart
-        const wait = cmd.offset - elapsed
-        if (wait > 0) {
-          await sleep(wait)
+        if (connected.rejected) {
+          const type = connected.rejectionType
+          if (type === 'capacity') collectors.rejections.capacity++
+          else if (type === 'rate_limit') collectors.rejections.rateLimit++
+          else if (type === 'concurrency') collectors.rejections.concurrency++
+          continue
         }
-        if (stopSignal.stopped) break
+
+        activeClients.add(connected.client)
+        collectors.connectTimes.push(connected.connectTimeMs)
 
         try {
           const result = await exec(connected.client, cmd.command)
@@ -144,33 +149,36 @@ async function runVU(
               collectors.nonZeroExits++
             }
           }
-        } catch {
+        } catch (err) {
           collectors.serverErrors++
+          collectors.errorSamples.push({ type: 'exec', message: String(err) })
         }
-      }
-    } catch {
-      // Connection error - count and retry
-      collectors.serverErrors++
-      await sleep(500)
-    } finally {
-      if (connected?.client) {
-        activeClients.delete(connected.client)
-        connected.client.end()
-        connected.client.destroy()
+      } catch (err) {
+        collectors.serverErrors++
+        collectors.errorSamples.push({ type: 'connect', message: String(err) })
+      } finally {
+        if (connected?.client) {
+          activeClients.delete(connected.client)
+          connected.client.end()
+          connected.client.destroy()
+        }
       }
     }
 
     if (!config.loop) break
   }
+  } finally {
+    activeVUCount.value--
+  }
 }
 
 /** Run a load test scenario */
 export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
-  const { vus, durationSeconds, rampUpSeconds = 0, metricsUrl } = config
-  const stopSignal = { stopped: false }
+  const { vus, durationSeconds, rampUpSeconds = 0, rampDownSeconds = 0, metricsUrl } = config
 
   // Track active clients for force cleanup
   const activeClients = new Set<Client>()
+  const activeVUCount = { value: 0 }
 
   // Shared collectors across all VUs
   const collectors = {
@@ -182,6 +190,7 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
     rejections: { capacity: 0, rateLimit: 0, concurrency: 0 },
     connections: 0,
     commands: 0,
+    errorSamples: [] as { type: string; message: string }[],
   }
 
   // Scrape metrics before
@@ -203,7 +212,7 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
     progressTimer = setInterval(() => {
       config.onProgress!({
         elapsedSeconds: Math.round((performance.now() - startTime) / 1000),
-        activeVUs: vuPromises.length,
+        activeVUs: activeVUCount.value,
         totalConnections: collectors.connections,
         totalCommands: collectors.commands,
         totalErrors: collectors.serverErrors,
@@ -215,25 +224,41 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
     }, interval)
   }
 
-  // Launch VUs with optional ramp-up
+  // Each VU gets its own stop signal for graceful ramp-down
+  const vuStopSignals: { stopped: boolean }[] = []
   const vuPromises: Promise<void>[] = []
   const rampDelayMs = rampUpSeconds > 0 ? (rampUpSeconds * 1000) / vus : 0
 
   for (let i = 0; i < vus; i++) {
-    vuPromises.push(runVU(config, collectors, stopSignal, activeClients))
+    const stopSignal = { stopped: false }
+    vuStopSignals.push(stopSignal)
+    vuPromises.push(runVU(config, collectors, stopSignal, activeClients, activeVUCount))
     if (rampDelayMs > 0 && i < vus - 1) {
       await sleep(rampDelayMs)
     }
   }
 
-  // Wait for duration
+  // Wait for duration (ramp-up + hold)
   const remainingMs = durationSeconds * 1000 - (performance.now() - startTime)
   if (remainingMs > 0) {
     await sleep(remainingMs)
   }
 
-  // Signal VUs to stop
-  stopSignal.stopped = true
+  // Ramp-down: stop VUs one by one in reverse order
+  if (rampDownSeconds > 0) {
+    const rampDownDelayMs = (rampDownSeconds * 1000) / vus
+    for (let i = vuStopSignals.length - 1; i >= 0; i--) {
+      vuStopSignals[i].stopped = true
+      if (i > 0) {
+        await sleep(rampDownDelayMs)
+      }
+    }
+  } else {
+    // Stop all at once
+    for (const signal of vuStopSignals) {
+      signal.stopped = true
+    }
+  }
 
   // Wait for in-flight VUs to finish, then force-destroy stragglers
   await Promise.race([
@@ -263,6 +288,16 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
     }
   }
 
+  // Deduplicate error samples by type+message
+  const errorMap = new Map<string, { type: string; message: string; count: number }>()
+  for (const sample of collectors.errorSamples) {
+    const key = `${sample.type}:${sample.message.slice(0, 100)}`
+    const existing = errorMap.get(key)
+    if (existing) existing.count++
+    else errorMap.set(key, { ...sample, count: 1 })
+  }
+  const errorSamples = [...errorMap.values()].sort((a, b) => b.count - a.count)
+
   return {
     totalConnections: collectors.connections,
     successfulConnections: collectors.connectTimes.length,
@@ -278,6 +313,7 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
     metricsBefore,
     metricsAfter,
     metricDeltas,
+    errorSamples,
   }
 }
 

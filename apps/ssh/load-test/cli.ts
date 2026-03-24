@@ -19,6 +19,8 @@ const SCENARIOS = {
   'memory-soak': () => import('./scenarios/memory-soak.js'),
   'expensive-commands': () => import('./scenarios/expensive-commands.js'),
   'session-churn': () => import('./scenarios/session-churn.js'),
+  // Autoscale
+  'gradual-ramp': () => import('./scenarios/gradual-ramp.js'),
   // Tier 3: Validation
   'connection-ramp': () => import('./scenarios/connection-ramp.js'),
   'per-ip-concurrency': () => import('./scenarios/per-ip-concurrency.js'),
@@ -46,6 +48,9 @@ Scenarios:
     memory-soak           Long duration memory leak detection
     expensive-commands    CPU contention ceiling
     session-churn         Connection setup/teardown limits
+
+  Autoscale:
+    gradual-ramp          Linear ramp simulating real traffic growth
 
   Tier 3 - Validation (limits enabled):
     connection-ramp       Soft/hard rejection curve
@@ -169,6 +174,9 @@ async function main() {
         break
       case 'session-churn':
         await mod.execute({ host, port, metricsUrl, ...(duration ? { stepDurationSeconds: duration } : {}) })
+        break
+      case 'gradual-ramp':
+        await mod.execute({ host, port, metricsUrl, profile, targetVUs: vus, holdSeconds: duration })
         break
       case 'connection-ramp':
         await mod.execute({ host, port, metricsUrl })
