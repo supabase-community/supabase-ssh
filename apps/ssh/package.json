@@ -4,7 +4,8 @@
   "type": "module",
   "packageManager": "pnpm@10.24.0",
   "scripts": {
-    "start": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
     "dev": "touch .env.local && tsx watch --env-file=.env.local src/server.ts",
     "generate:host-key": "tsx scripts/generate-host-key.ts",
     "generate:host-key:local": "tsx scripts/generate-host-key.ts > ssh_host_key",
