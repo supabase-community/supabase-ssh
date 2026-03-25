@@ -17,6 +17,9 @@ interface ExtendedMountableFsOptions extends Omit<MountableFsOptions, 'base'> {
 export class ExtendedMountableFs extends MountableFs {
   #base: InMemoryFs
   #readOnly: boolean
+  #readFiles: Set<string> = new Set()
+  #readDirs: Set<string> = new Set()
+  #observing = false
 
   constructor(opts?: ExtendedMountableFsOptions) {
     const base = new InMemoryFs()
@@ -24,6 +27,35 @@ export class ExtendedMountableFs extends MountableFs {
     super({ ...rest, base })
     this.#base = base
     this.#readOnly = readOnly ?? false
+  }
+
+  /** Start observing file and directory reads. Clears any previous observations. */
+  startObservingReads(): void {
+    this.#readFiles.clear()
+    this.#readDirs.clear()
+    this.#observing = true
+  }
+
+  /** Stop observing and return the collected file/dir reads. */
+  stopObservingReads(): { files: string[]; dirs: string[] } {
+    this.#observing = false
+    const result = { files: [...this.#readFiles], dirs: [...this.#readDirs] }
+    this.#readFiles.clear()
+    this.#readDirs.clear()
+    return result
+  }
+
+  override async readFile(
+    p: string,
+    ...a: Parameters<MountableFs['readFile']> extends [string, ...infer R] ? R : never
+  ) {
+    if (this.#observing) this.#readFiles.add(p)
+    return super.readFile(p, ...a)
+  }
+
+  override async readdir(p: string) {
+    if (this.#observing) this.#readDirs.add(p)
+    return super.readdir(p)
   }
 
   mkdirSync(path: string, options?: { recursive?: boolean }) {

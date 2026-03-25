@@ -70,16 +70,18 @@ const sshCommand = defineCommand('ssh', async (args) => {
  * @param docsDir - Path to docs directory to mount. Defaults to DOCS_DIR env or ../docs/public/docs.
  */
 export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
+  const fs = new ExtendedMountableFs({
+    readOnly: true,
+    mounts: [
+      {
+        mountPoint: '/supabase/docs',
+        filesystem: new OverlayFs({ root: docsDir, mountPoint: '/', readOnly: true }),
+      },
+    ],
+  })
+
   const bash = new Bash({
-    fs: new ExtendedMountableFs({
-      readOnly: true,
-      mounts: [
-        {
-          mountPoint: '/supabase/docs',
-          filesystem: new OverlayFs({ root: docsDir, mountPoint: '/', readOnly: true }),
-        },
-      ],
-    }),
+    fs,
     cwd: '/supabase',
     env: {
       HOME: '/supabase',
@@ -95,5 +97,5 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
   // Enable alias expansion
   await bash.exec('shopt -s expand_aliases')
 
-  return bash
+  return { bash, fs }
 }

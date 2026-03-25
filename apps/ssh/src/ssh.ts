@@ -25,6 +25,8 @@ import {
   recordConcurrencyLimited,
   recordConnectionRejected,
   recordRateLimited,
+  setReadPaths,
+  shouldObserveFs,
   startCommandSpan,
 } from './telemetry.js'
 
@@ -193,7 +195,8 @@ export function createSSHServer(opts: SSHServerOptions) {
       /** Sends a banner and disconnects. Used by limit checks below. */
       function reject(proto: SSH2Protocol, message: string): void {
         sendAuthBanner(proto, message)
-        client.end()
+        // Small delay so the banner flushes before the TCP FIN.
+        setTimeout(() => client.end(), 50)
       }
 
       /** Probabilistic capacity check. Returns true if rejected. */
@@ -282,8 +285,9 @@ export function createSSHServer(opts: SSHServerOptions) {
 
             const cmdStart = Date.now()
             const cmdSpan = startCommandSpan(sessionCtx, command)
+            const { bash, fs } = await createBash(docsDir)
+            if (shouldObserveFs(command)) fs.startObservingReads()
             try {
-              const bash = await createBash(docsDir)
               const result = await bash.exec(command, { signal: AbortSignal.timeout(execTimeout) })
               if (result.stdout) channel.write(result.stdout)
               if (result.stderr) channel.stderr.write(result.stderr)
@@ -310,6 +314,9 @@ export function createSSHServer(opts: SSHServerOptions) {
                 stderrBytes: 0,
                 timedOut,
               })
+            } finally {
+              const { files, dirs } = fs.stopObservingReads()
+              setReadPaths(cmdSpan, files, dirs)
             }
 
             channel.end()
@@ -328,7 +335,7 @@ export function createSSHServer(opts: SSHServerOptions) {
             channel.on('data', () => resetIdle())
 
             let activeSpan: Span | null = null
-            const bash = await createBash(docsDir)
+            const { bash, fs } = await createBash(docsDir)
             const shell = createShellSession({
               bash,
               input: channel,
@@ -346,9 +353,14 @@ export function createSSHServer(opts: SSHServerOptions) {
                 }
                 if (command) {
                   activeSpan = startCommandSpan(sessionCtx, command)
+                  if (shouldObserveFs(command)) fs.startObservingReads()
                 }
               },
               afterExec: (cmdInfo) => {
+                if (activeSpan) {
+                  const { files, dirs } = fs.stopObservingReads()
+                  setReadPaths(activeSpan, files, dirs)
+                }
                 incCommands(cmdInfo.command ?? 'unknown', cmdInfo.exitCode)
                 observeCommandDuration(cmdInfo.durationMs / 1000)
                 if (cmdInfo.timedOut) incCommandTimeouts()

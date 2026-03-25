@@ -129,6 +129,26 @@ export function startCommandSpan(ctx: SessionContext, command: string): Span {
   })
 }
 
+/** Commands where observing file/dir reads provides meaningful signal. */
+const FILE_READ_COMMANDS = new Set(['cat', 'head', 'tail'])
+const DIR_READ_COMMANDS = new Set(['ls'])
+
+/** Returns whether fs observation should be enabled for a command. */
+export function shouldObserveFs(command: string): boolean {
+  const name = command.split(/\s+/)[0] ?? ''
+  return FILE_READ_COMMANDS.has(name) || DIR_READ_COMMANDS.has(name)
+}
+
+/** Attach read file/dir paths to a command span. */
+export function setReadPaths(
+  span: Span,
+  files: string[],
+  dirs: string[]
+): void {
+  if (files.length > 0) span.setAttribute('ssh.command.files_read', files)
+  if (dirs.length > 0) span.setAttribute('ssh.command.dirs_read', dirs)
+}
+
 /** End a command span with result attributes. */
 export function endCommandSpan(
   span: Span,
