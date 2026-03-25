@@ -87,15 +87,21 @@ const LOGO =
   '            |_|'
 
 const bg = chalk.bgRgb(50, 50, 50)
-const pad = '                                         '
+const pad = (count: number) => ' '.repeat(count)
+// const pad = '                                         '
 
 const BANNER =
-  `\r\n${green(LOGO)}\r\n` +
-  `\r\nTell your agent to use ${chalk.dim('ssh supabase.sh <command>')} to search the docs:\r\n` +
-  `\r\n${bg(pad)}\r\n` +
-  `${bg(`  ${chalk.dim(`# Add to AGENTS.md (or CLAUDE.md)`)}      `)}\r\n` +
+  `${green(LOGO)}\r\n\r\n` +
+  `Docs-over-SSH lets your agent browse Supabase documentation directly using bash.\r\n\r\n` +
+  `Tell your agent to use ${chalk.dim('ssh supabase.sh <command>')} to search the docs:\r\n\r\n` +
+  `${bg(pad(36))}\r\n` +
+  `${bg(`  ${chalk.dim(`# Setup using claude`)}              `)}\r\n` +
+  `${bg(`  $ ssh supabase.sh setup | claude  `)}\r\n` +
+  `${bg(pad(36))}\r\n\r\n` +
+  `${bg(pad(41))}\r\n` +
+  `${bg(`  ${chalk.dim(`# Or append directly to AGENTS.md`)}      `)}\r\n` +
   `${bg(`  $ ssh supabase.sh agents >> AGENTS.md  `)}\r\n` +
-  `${bg(pad)}\r\n\r\n` +
+  `${bg(pad(41))}\r\n\r\n` +
   `Or explore them yourself with tree/grep/cat/etc:\r\n\r\n`
 
 export interface SSHServerOptions {
