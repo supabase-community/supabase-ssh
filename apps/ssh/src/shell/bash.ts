@@ -23,11 +23,7 @@ export const EXECUTION_LIMITS = {
   maxHeredocSize: 1024 * 1024, // 1MB
 }
 
-const AGENTS_MD = `## Supabase Docs
-
-Before working on a Supabase feature, check the docs via \`ssh supabase.sh <command>\`.
-
-\`\`\`bash
+const INSTRUCTIONS = `\`\`\`bash
 # Search for a topic
 ssh supabase.sh grep -rl 'auth' /supabase/docs/
 
@@ -41,7 +37,27 @@ ssh supabase.sh find /supabase/docs/guides/database -name '*.md'
 ssh supabase.sh grep -r 'RLS' /supabase/docs/guides/auth --include='*.md' -l
 \`\`\`
 
-All docs live under \`/supabase/docs/\` as markdown files. You can use any standard Unix tools (grep, find, cat, etc.) to search and read them.
+All docs live under \`/supabase/docs/\` as markdown files. You can use any standard Unix tools (grep, find, cat, etc.) to search and read them.`
+
+const AGENTS_MD = `## Supabase Docs
+
+Before working on a Supabase feature, check the docs via \`ssh supabase.sh <command>\`.
+
+${INSTRUCTIONS}
+`
+
+const SKILL_MD = `---
+name: supabase-docs
+description: Search and read Supabase documentation. Use when working on a Supabase feature or integration.
+---
+
+# Supabase Docs
+
+Search and read Supabase documentation over SSH.
+
+## How to use
+
+${INSTRUCTIONS}
 `
 
 const sshCommand = defineCommand('ssh', async (args) => {
@@ -66,6 +82,7 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
     readOnly: true,
     initialFiles: {
       '/supabase/AGENTS.md': AGENTS_MD,
+      '/supabase/SKILL.md': SKILL_MD,
     },
     mounts: [
       {
@@ -84,6 +101,7 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
       BASH_ALIAS_la: 'ls -a',
       BASH_ALIAS_l: 'ls -CF',
       BASH_ALIAS_agents: 'echo && cat /supabase/AGENTS.md',
+      BASH_ALIAS_skill: 'echo && cat /supabase/SKILL.md',
     },
     customCommands: [sshCommand],
     defenseInDepth: true,
