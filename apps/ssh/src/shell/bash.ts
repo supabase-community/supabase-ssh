@@ -48,7 +48,7 @@ ${INSTRUCTIONS}
 
 const SKILL_MD = `---
 name: supabase-docs
-description: Search and read Supabase documentation. Use when working on a Supabase feature or integration.
+description: Search and read Supabase documentation using a bash shell. Use when working on a Supabase feature or troubleshooting a problem.
 ---
 
 # Supabase Docs
@@ -58,6 +58,69 @@ Search and read Supabase documentation over SSH.
 ## How to use
 
 ${INSTRUCTIONS}
+`
+
+const SETUP_MD = `# Supabase Docs - Setup
+
+You are helping a user set up access to Supabase documentation via SSH.
+
+1. First tell them the purpose of this tool (docs over ssh/bash)
+2. Ask the user which option they prefer (use AskUserQuestion or similar if available)
+
+Options:
+
+1. **Append to agent instructions file (recommended)** - Adds lightweight instructions to the project's agent config file. Most reliable since instructions are always loaded and the footprint is small.
+2. **Install as a skill** - Creates a skill directory with a SKILL.md. Skills are loaded on-demand but not always reliable.
+3. **Both** - Adds to agent instructions and installs the skill.
+
+After the user chooses, follow the steps below. If you are unsure which agent or tool the user is using, ask them.
+
+## Option 1: Agent instructions file
+
+Run this command and append the output to the project's agent instructions file:
+
+\`\`\`bash
+ssh supabase.sh agents >> <instructions-file>
+\`\`\`
+
+Common instructions files by tool:
+
+| Tool | File |
+|------|------|
+| Claude Code | \`CLAUDE.md\` |
+| GitHub Copilot | \`AGENTS.md\` |
+| Codex | \`AGENTS.md\` |
+| Gemini CLI | \`GEMINI.md\` |
+| Cursor | \`AGENTS.md\` |
+| OpenCode | \`AGENTS.md\` |
+| Other | \`AGENTS.md\` |
+
+## Option 2: Skill
+
+Run this command and write the output to the skill directory.
+
+Pick the path that matches the user's tool. \`.agents/skills/\` is a cross-client convention supported by most tools:
+
+| Tool | Skill path |
+|------|-----------|
+| Claude Code | \`.claude/skills/supabase-docs/SKILL.md\` |
+| GitHub Copilot | \`.github/skills/supabase-docs/SKILL.md\` |
+| Codex | \`.agents/skills/supabase-docs/SKILL.md\` |
+| Gemini CLI | \`.gemini/skills/supabase-docs/SKILL.md\` or \`.agents/skills/supabase-docs/SKILL.md\` |
+| Cursor | \`.cursor/skills/supabase-docs/SKILL.md\` or \`.agents/skills/supabase-docs/SKILL.md\` |
+| OpenCode | \`.opencode/skills/supabase-docs/SKILL.md\` or \`.agents/skills/supabase-docs/SKILL.md\` |
+| Other | \`.agents/skills/supabase-docs/SKILL.md\` |
+
+\`\`\`bash
+mkdir -p <skill-dir>/supabase-docs
+ssh supabase.sh skill > <skill-dir>/supabase-docs/SKILL.md
+\`\`\`
+
+## Option 3: Both
+
+Run both sets of commands above.
+
+After setup, confirm to the user what was written and where.
 `
 
 const sshCommand = defineCommand('ssh', async (args) => {
@@ -83,6 +146,7 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
     initialFiles: {
       '/supabase/AGENTS.md': AGENTS_MD,
       '/supabase/SKILL.md': SKILL_MD,
+      '/supabase/SETUP.md': SETUP_MD,
     },
     mounts: [
       {
@@ -102,6 +166,7 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
       BASH_ALIAS_l: 'ls -CF',
       BASH_ALIAS_agents: 'echo && cat /supabase/AGENTS.md',
       BASH_ALIAS_skill: 'echo && cat /supabase/SKILL.md',
+      BASH_ALIAS_setup: 'cat /supabase/SETUP.md',
     },
     customCommands: [sshCommand],
     defenseInDepth: true,
