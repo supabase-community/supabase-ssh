@@ -4,4 +4,3 @@ dist
 *.log
 .env*
 ssh_host_key
-docs

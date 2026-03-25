@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "touch .env.local && tsx watch --env-file=.env.local src/server.ts",
+    "setup:docs": "rm -rf docs && mkdir -p docs && curl -sL https://docs-git-feat-docs-archive-supabase.vercel.app/docs/docs.tar.gz | tar -xz -C docs",
+    "dev": "[ -d docs ] || pnpm run setup:docs && touch .env.local && tsx watch --env-file=.env.local src/server.ts",
     "generate:host-key": "tsx scripts/generate-host-key.ts",
     "generate:host-key:local": "tsx scripts/generate-host-key.ts > ssh_host_key",
     "deploy:prod": "fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh",

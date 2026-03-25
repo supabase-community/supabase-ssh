@@ -27,7 +27,7 @@ COPY --from=builder /app/apps/ssh/dist ./apps/ssh/dist
 COPY --from=builder /app/apps/ssh/package.json ./apps/ssh/package.json
 
 # Docs content - fetched by CI before docker build
-COPY docs ./docs
+COPY apps/ssh/docs ./apps/ssh/docs
 
 WORKDIR /app/apps/ssh
 EXPOSE 22

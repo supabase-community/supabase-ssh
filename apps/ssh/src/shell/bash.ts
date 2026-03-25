@@ -3,7 +3,7 @@ import { Bash, defineCommand, OverlayFs } from 'just-bash'
 
 import { ExtendedMountableFs } from './extended-mountable-fs.js'
 
-const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../../docs')
+const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? './docs')
 
 export const EXECUTION_LIMITS = {
   maxCommandCount: 1000,
@@ -138,7 +138,7 @@ const sshCommand = defineCommand('ssh', async (args) => {
 
 /**
  * Creates a sandboxed Bash instance.
- * @param docsDir - Path to docs directory to mount. Defaults to DOCS_DIR env or ../docs/public/docs.
+ * @param docsDir - Path to docs directory to mount. Defaults to DOCS_DIR env or ./docs.
  */
 export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
   const fs = new ExtendedMountableFs({

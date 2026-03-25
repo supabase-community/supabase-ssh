@@ -10,4 +10,4 @@
 !apps/ssh/
 
 # Pre-built docs markdown
-!apps/docs/public/docs/guides/
+!apps/ssh/docs/
