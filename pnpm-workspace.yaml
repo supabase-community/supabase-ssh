@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+
+catalog:
+  tsx: 4.20.3
+  typescript: ~5.9.0
+  vitest: ^3.2.0

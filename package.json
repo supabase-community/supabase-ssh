@@ -1,0 +1,16 @@
+{
+  "name": "supabase-ssh-repo",
+  "private": true,
+  "packageManager": "pnpm@10.24.0",
+  "scripts": {
+    "build": "pnpm --filter supabase-ssh run build",
+    "dev": "pnpm --filter supabase-ssh run dev",
+    "test": "pnpm --filter supabase-ssh run test",
+    "start": "pnpm --filter supabase-ssh run start"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "ssh2"
+    ]
+  }
+}

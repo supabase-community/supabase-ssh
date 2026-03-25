@@ -1,6 +1,8 @@
 import { generateKeyPairSync } from 'node:crypto'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { resolve } from 'node:path'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { resolve, join } from 'node:path'
 import { describe, it, expect, afterEach } from 'vitest'
 import { Client } from 'ssh2'
 
@@ -10,6 +12,7 @@ const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.e
 }) as string
 
 const SERVER_PATH = resolve(import.meta.dirname, 'server.ts')
+const DOCS_DIR = mkdtempSync(join(tmpdir(), 'ssh-test-docs-'))
 
 /** Spawn the server process and wait until it's listening. Returns the bound port. */
 function spawnServer(): Promise<{ proc: ChildProcess; port: number }> {
@@ -24,6 +27,7 @@ function spawnServer(): Promise<{ proc: ChildProcess; port: number }> {
         EXEC_TIMEOUT: '5000',
         DRAIN_TIMEOUT: '1000',
         METRICS_PORT: '0',
+        DOCS_DIR,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     })

@@ -9,8 +9,8 @@
     "dev": "touch .env.local && tsx watch --env-file=.env.local src/server.ts",
     "generate:host-key": "tsx scripts/generate-host-key.ts",
     "generate:host-key:local": "tsx scripts/generate-host-key.ts > ssh_host_key",
-    "deploy:prod": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh",
-    "deploy:staging": "pnpm run --filter docs build:guides-markdown && fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh-staging",
+    "deploy:prod": "fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh",
+    "deploy:staging": "fly deploy ../.. --config \"$(pwd)/fly.toml\" --app supabase-ssh-staging",
     "test": "vitest run",
     "load-test": "tsx load-test/cli.ts",
     "load-test:capture": "tsx --env-file=.env.local load-test/scripts/capture-session.ts"

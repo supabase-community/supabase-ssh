@@ -6,13 +6,15 @@ Commands run inside [just-bash](https://github.com/vercel-labs/just-bash) - a sa
 
 ## Local development
 
-**1. Build the docs** (from repo root):
+**1. Get the docs content:**
+
+Place built markdown docs in `/docs` at the repo root (or set `DOCS_DIR` to point elsewhere). In production, CI fetches these before building the Docker image.
+
+For local dev, you can copy them from a local supabase/supabase checkout:
 
 ```bash
-pnpm run --filter docs build:guides-markdown
+cp -r ../supabase/apps/docs/public/docs ./docs
 ```
-
-Outputs to `apps/docs/public/docs/guides/`. The Docker image copies this directory directly.
 
 **2. Generate a host key** (from `apps/ssh/`):
 
@@ -128,7 +130,7 @@ pnpm deploy:staging  # supabase-ssh-staging
 pnpm deploy:prod     # supabase-ssh
 ```
 
-Both scripts run `build:guides-markdown` automatically before deploying.
+Docs content must be available at `../../docs` (or `DOCS_DIR`) before deploying.
 
 ## Simulating a deployed environment
 

@@ -7,7 +7,6 @@ RUN apk add --no-cache python3 make g++ && npm install -g node-gyp
 WORKDIR /app
 
 # Build context is repo root.
-# Run `pnpm run --filter docs build:guides-markdown` before building this image.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/ssh/package.json apps/ssh/tsconfig.json ./apps/ssh/
 RUN pnpm install --frozen-lockfile --filter supabase-ssh
@@ -26,7 +25,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/ssh/node_modules ./apps/ssh/node_modules
 COPY --from=builder /app/apps/ssh/dist ./apps/ssh/dist
 COPY --from=builder /app/apps/ssh/package.json ./apps/ssh/package.json
-COPY apps/docs/public/docs ./apps/docs/public/docs
+
+# Docs content - fetched by CI before docker build
+COPY docs ./docs
 
 WORKDIR /app/apps/ssh
 EXPOSE 22

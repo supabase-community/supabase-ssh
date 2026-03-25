@@ -3,7 +3,7 @@ import { Bash, defineCommand, OverlayFs } from 'just-bash'
 
 import { ExtendedMountableFs } from './extended-mountable-fs.js'
 
-const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../docs/public/docs')
+const DEFAULT_DOCS_DIR = resolve(process.env.DOCS_DIR ?? '../../docs')
 
 export const EXECUTION_LIMITS = {
   maxCommandCount: 1000,
