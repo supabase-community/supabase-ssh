@@ -1,7 +1,8 @@
-import { InMemoryFs, MountableFs, type MountableFsOptions } from 'just-bash'
+import { InitialFiles, InMemoryFs, MountableFs, type MountableFsOptions } from 'just-bash'
 
 interface ExtendedMountableFsOptions extends Omit<MountableFsOptions, 'base'> {
   readOnly?: boolean
+  initialFiles?: InitialFiles | undefined
 }
 
 /**
@@ -22,8 +23,8 @@ export class ExtendedMountableFs extends MountableFs {
   #observing = false
 
   constructor(opts?: ExtendedMountableFsOptions) {
-    const base = new InMemoryFs()
-    const { readOnly, ...rest } = opts ?? {}
+    const { readOnly, initialFiles, ...rest } = opts ?? {}
+    const base = new InMemoryFs(initialFiles)
     super({ ...rest, base })
     this.#base = base
     this.#readOnly = readOnly ?? false

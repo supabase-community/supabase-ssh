@@ -23,9 +23,7 @@ export const EXECUTION_LIMITS = {
   maxHeredocSize: 1024 * 1024, // 1MB
 }
 
-const AGENTS_MD = `
-
-## Supabase Docs
+const AGENTS_MD = `## Supabase Docs
 
 Before working on a Supabase feature, check the docs via \`ssh supabase.sh <command>\`.
 
@@ -45,12 +43,6 @@ ssh supabase.sh grep -r 'RLS' /supabase/docs/guides/auth --include='*.md' -l
 
 All docs live under \`/supabase/docs/\` as markdown files. You can use any standard Unix tools (grep, find, cat, etc.) to search and read them.
 `
-
-const agentsCommand = defineCommand('agents', async () => ({
-  stdout: AGENTS_MD,
-  stderr: '',
-  exitCode: 0,
-}))
 
 const sshCommand = defineCommand('ssh', async (args) => {
   const cmd = args.join(' ')
@@ -72,6 +64,9 @@ const sshCommand = defineCommand('ssh', async (args) => {
 export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
   const fs = new ExtendedMountableFs({
     readOnly: true,
+    initialFiles: {
+      '/supabase/AGENTS.md': AGENTS_MD,
+    },
     mounts: [
       {
         mountPoint: '/supabase/docs',
@@ -88,8 +83,9 @@ export async function createBash(docsDir = DEFAULT_DOCS_DIR) {
       BASH_ALIAS_ll: 'ls -alF',
       BASH_ALIAS_la: 'ls -a',
       BASH_ALIAS_l: 'ls -CF',
+      BASH_ALIAS_agents: 'echo && cat /supabase/AGENTS.md',
     },
-    customCommands: [agentsCommand, sshCommand],
+    customCommands: [sshCommand],
     defenseInDepth: true,
     executionLimits: EXECUTION_LIMITS,
   })
