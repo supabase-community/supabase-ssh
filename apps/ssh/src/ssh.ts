@@ -427,7 +427,16 @@ export function createSSHServer(opts: SSHServerOptions) {
       })
 
       if (activeClients.size > 0) {
-        // 2. Wait for in-flight commands to finish naturally
+        // 2. Notify active shell sessions immediately
+        if (message) {
+          for (const [, { channels }] of activeClients) {
+            for (const channel of channels) {
+              channel.write(message)
+            }
+          }
+        }
+
+        // 3. Wait for in-flight commands to finish naturally
         const drained = new Promise<void>((resolve) => {
           const check = () => {
             if (activeClients.size === 0) resolve()
@@ -442,11 +451,10 @@ export function createSSHServer(opts: SSHServerOptions) {
           new Promise<true>((resolve) => setTimeout(() => resolve(true), drainTimeout)),
         ])
 
-        // 3. If drain timed out, notify and force-disconnect remaining sessions
+        // 4. If drain timed out, force-disconnect remaining sessions
         if (timedOut) {
           for (const [, { channels }] of activeClients) {
             for (const channel of channels) {
-              if (message) channel.write(message)
               channel.exit(255)
             }
           }
