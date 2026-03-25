@@ -131,31 +131,3 @@ pnpm deploy:prod     # supabase-ssh
 ```
 
 Docs content must be available at `../../docs` (or `DOCS_DIR`) before deploying.
-
-## Simulating a deployed environment
-
-To use `docs.supabase.com` as the hostname locally, add this to `/etc/hosts`:
-
-```
-127.0.0.1 docs.supabase.com
-```
-
-Then connect normally:
-
-```bash
-ssh docs.supabase.com "grep -r 'auth' /docs/auth/"
-```
-
-Remove the entry when done.
-
-## Demo
-
-The `demo/` folder contains an `AGENTS.md` system prompt (`CLAUDE.md` symlinked) demonstrating how an agent might access the docs via this server.
-
-## Aliases
-
-| Alias | Expands to |
-| ----- | ---------- |
-| `ll`  | `ls -alF`  |
-| `la`  | `ls -a`    |
-| `l`   | `ls -CF`   |
