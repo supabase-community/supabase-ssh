@@ -3,10 +3,12 @@ import { posix } from 'node:path'
 import type { Span } from '@opentelemetry/api'
 import { Chalk } from 'chalk'
 import ssh2, { type ServerChannel } from 'ssh2'
-
+import { CommandCache, type CommandCacheOptions } from './command-cache.js'
 import {
   decActiveConnections,
   incActiveConnections,
+  incCommandCacheHit,
+  incCommandCacheMiss,
   incCommands,
   incCommandTimeouts,
   incConcurrencyRejections,
@@ -132,6 +134,8 @@ export interface SSHServerOptions {
    * maxConnectionsPerIp which caps concurrent connections per instance.
    */
   rateLimiter?: RateLimiter
+  /** Command result cache. Defaults to enabled. Pass `false` to disable. */
+  commandCache?: false | CommandCacheOptions
 }
 
 /** Creates a testable SSH server. Call listen() to start, close() to stop. */
@@ -150,7 +154,25 @@ export function createSSHServer(opts: SSHServerOptions) {
   } = opts
 
   const activeClients = new Map<ssh2.Connection, { ip: string; channels: Set<ServerChannel> }>()
+  const commandCache =
+    opts.commandCache !== false
+      ? new CommandCache(opts.commandCache === undefined ? undefined : opts.commandCache)
+      : null
   let isShuttingDown = false
+
+  /** Execute a command via a fresh Bash sandbox and cache the result. */
+  async function execAndCache(cwd: string, command: string, cmdSpan: Span) {
+    const { bash, fs } = await createBash(docsDir)
+    if (shouldObserveFs(command)) fs.startObservingReads()
+    try {
+      const result = await bash.exec(command, { cwd, signal: AbortSignal.timeout(execTimeout) })
+      commandCache?.set(cwd, command, result)
+      return result
+    } finally {
+      const { files, dirs } = fs.stopObservingReads()
+      setReadPaths(cmdSpan, files, dirs)
+    }
+  }
 
   const server = new Server(
     {
@@ -294,10 +316,15 @@ export function createSSHServer(opts: SSHServerOptions) {
 
             const cmdStart = Date.now()
             const cmdSpan = startCommandSpan(sessionCtx, command)
-            const { bash, fs } = await createBash(docsDir)
-            if (shouldObserveFs(command)) fs.startObservingReads()
             try {
-              const result = await bash.exec(command, { signal: AbortSignal.timeout(execTimeout) })
+              const cwd = '/supabase'
+              const cached = commandCache?.get(cwd, command)
+              if (commandCache) {
+                if (cached) incCommandCacheHit()
+                else incCommandCacheMiss()
+              }
+              const cacheHit = !!cached
+              const result = cached ?? (await execAndCache(cwd, command, cmdSpan))
               if (result.stdout) channel.write(result.stdout)
               if (result.stderr) channel.stderr.write(result.stderr)
               channel.exit(result.exitCode)
@@ -309,6 +336,7 @@ export function createSSHServer(opts: SSHServerOptions) {
                 stdoutBytes: Buffer.byteLength(result.stdout ?? ''),
                 stderrBytes: Buffer.byteLength(result.stderr ?? ''),
                 timedOut: false,
+                cacheHit,
               })
             } catch (err) {
               const timedOut = err instanceof Error && err.name === 'TimeoutError'
@@ -323,9 +351,6 @@ export function createSSHServer(opts: SSHServerOptions) {
                 stderrBytes: 0,
                 timedOut,
               })
-            } finally {
-              const { files, dirs } = fs.stopObservingReads()
-              setReadPaths(cmdSpan, files, dirs)
             }
 
             channel.end()
@@ -410,6 +435,10 @@ export function createSSHServer(opts: SSHServerOptions) {
       return activeClients.size
     },
 
+    get cacheStats() {
+      return commandCache?.stats ?? null
+    },
+
     listen(): Promise<number> {
       return new Promise((resolve) => {
         server.listen(port, '0.0.0.0', () => {
@@ -422,6 +451,12 @@ export function createSSHServer(opts: SSHServerOptions) {
     },
 
     async close(message?: string, drainTimeout = 15_000): Promise<void> {
+      if (commandCache) {
+        const stats = commandCache.stats
+        console.log(
+          `Command cache: ${stats.entries} entries, ${stats.hits} hits, ${stats.misses} misses, ${(stats.hitRate * 100).toFixed(1)}% hit rate`,
+        )
+      }
       isShuttingDown = true
 
       // 1. Stop accepting new connections

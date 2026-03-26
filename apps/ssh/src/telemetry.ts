@@ -164,6 +164,7 @@ export function endCommandSpan(
     stdoutBytes: number
     stderrBytes: number
     timedOut: boolean
+    cacheHit?: boolean
   },
 ): void {
   span.setAttributes({
@@ -171,6 +172,7 @@ export function endCommandSpan(
     'ssh.command.stdout_bytes': result.stdoutBytes,
     'ssh.command.stderr_bytes': result.stderrBytes,
     'ssh.command.timed_out': result.timedOut,
+    ...(result.cacheHit !== undefined && { 'ssh.command.cache_hit': result.cacheHit }),
   })
   span.end()
 }

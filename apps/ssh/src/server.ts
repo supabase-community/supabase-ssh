@@ -23,6 +23,13 @@ const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX ?? '30', 10)
 const RATE_LIMIT_WINDOW_SECONDS = parseInt(process.env.RATE_LIMIT_WINDOW_SECONDS ?? '60', 10)
 
+const COMMAND_CACHE = process.env.COMMAND_CACHE !== 'false'
+const COMMAND_CACHE_MAX_ENTRIES = parseInt(process.env.COMMAND_CACHE_MAX_ENTRIES ?? '1000', 10)
+const COMMAND_CACHE_MAX_OUTPUT_BYTES = parseInt(
+  process.env.COMMAND_CACHE_MAX_OUTPUT_BYTES ?? String(512 * 1024),
+  10,
+)
+
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
 async function loadHostKey(): Promise<Buffer> {
@@ -71,6 +78,9 @@ async function main() {
     hardLimit: MAX_CONNECTIONS,
     maxConnectionsPerIp: MAX_CONNECTIONS_PER_IP,
     rateLimiter,
+    commandCache: COMMAND_CACHE
+      ? { maxEntries: COMMAND_CACHE_MAX_ENTRIES, maxOutputBytes: COMMAND_CACHE_MAX_OUTPUT_BYTES }
+      : false,
   })
 
   await srv.listen()

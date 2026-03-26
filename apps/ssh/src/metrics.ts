@@ -59,6 +59,18 @@ const commandTimeoutsTotal = new Counter({
   registers: [register],
 })
 
+const commandCacheHitsTotal = new Counter({
+  name: 'ssh_command_cache_hits_total',
+  help: 'Command cache hits',
+  registers: [register],
+})
+
+const commandCacheMissesTotal = new Counter({
+  name: 'ssh_command_cache_misses_total',
+  help: 'Command cache misses',
+  registers: [register],
+})
+
 // --- Histograms (distributions) ---
 
 const commandDurationSeconds = new Histogram({
@@ -112,6 +124,14 @@ export function incCommands(command: string, exitCode: number) {
 
 export function incCommandTimeouts() {
   commandTimeoutsTotal.inc()
+}
+
+export function incCommandCacheHit() {
+  commandCacheHitsTotal.inc()
+}
+
+export function incCommandCacheMiss() {
+  commandCacheMissesTotal.inc()
 }
 
 export function observeCommandDuration(seconds: number) {
