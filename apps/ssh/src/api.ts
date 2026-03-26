@@ -33,6 +33,8 @@ export function createApiServer(opts: ApiServerOptions = {}) {
     }),
   )
 
+  app.get('/healthz', (c) => c.json({ status: 'ok' }))
+
   app.post('/api/exec', async (c) => {
     // Rate limit by IP
     if (rateLimiter) {
