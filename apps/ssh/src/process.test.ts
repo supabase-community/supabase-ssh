@@ -17,7 +17,7 @@ const DOCS_DIR = mkdtempSync(join(tmpdir(), 'ssh-test-docs-'))
 /** Spawn the server process and wait until it's listening. Returns the bound port. */
 function spawnServer(): Promise<{ proc: ChildProcess; port: number }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('npx', ['tsx', SERVER_PATH], {
+    const proc = spawn('tsx', [SERVER_PATH], {
       env: {
         ...process.env,
         SSH_HOST_KEY: hostKey,
