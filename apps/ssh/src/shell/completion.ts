@@ -40,7 +40,7 @@ export function parseCompletionContext(line: string) {
 
   const trimmed = cmdLine.trimStart()
   const parts = trimmed.split(/\s+/)
-  const word = cmdLine.endsWith(' ') ? '' : parts[parts.length - 1] ?? ''
+  const word = cmdLine.endsWith(' ') ? '' : (parts[parts.length - 1] ?? '')
 
   // Walk backwards from cursor to find preceding non-whitespace char.
   // This mirrors bash's `ti = start - 1; while (whitespace(...)) ti--` loop.
@@ -93,7 +93,7 @@ export function findCmdStart(line: string): number {
 export function shellQuote(s: string): string {
   if (s === '') return "''"
   if (/^[a-zA-Z0-9_./-]+$/.test(s)) return s
-  return "'" + s.replace(/'/g, "'\\''") + "'"
+  return `'${s.replace(/'/g, "'\\''")}'`
 }
 
 /** Generate completion matches via just-bash's compgen builtin. Mirrors the C-internal compgen calls in bashline.c. */
@@ -118,7 +118,7 @@ export interface CompletionEngine {
  */
 export function createCompletionEngine(
   bash: Bash,
-  completeFn?: CommandCompleteFn
+  completeFn?: CommandCompleteFn,
 ): CompletionEngine {
   return {
     async complete(line: string, cwd: string): Promise<CompletionResult> {
@@ -163,7 +163,7 @@ export function createCompletionEngine(
 async function completeSyntaxAware(
   bash: Bash,
   word: string,
-  cwd: string
+  cwd: string,
 ): Promise<string[] | null> {
   // --- $ prefix: variable names ---
   // Ref: bashline.c lines 1836-1862
@@ -172,11 +172,11 @@ async function completeSyntaxAware(
   if (word.startsWith('$')) {
     if (word.startsWith('${')) {
       // Parameter expansion: ${PAT<tab> -> complete with closing }
-      const hits = (await compgen(bash, 'variable', word.slice(2), cwd)).map((v) => '${' + v + '}')
+      const hits = (await compgen(bash, 'variable', word.slice(2), cwd)).map((v) => `\${${v}}`)
       return formatHits(hits)
     }
     // Plain $VAR completion
-    const hits = (await compgen(bash, 'variable', word.slice(1), cwd)).map((v) => '$' + v)
+    const hits = (await compgen(bash, 'variable', word.slice(1), cwd)).map((v) => `$${v}`)
     return formatHits(hits)
   }
 
@@ -230,14 +230,14 @@ async function completeFiles(bash: Bash, word: string, cwd: string): Promise<Com
           const stat = await bash.fs.stat(fullPath)
           // Restore ~/prefix for display
           const display = tildePrefix
-            ? tildePrefix + match.slice(home!.length + (tildePrefix === '~/' ? 1 : 0))
+            ? tildePrefix + match.slice((home?.length ?? 0) + (tildePrefix === '~/' ? 1 : 0))
             : match
-          if (stat.isDirectory) return display + '/'
-          return matches.length === 1 ? display + ' ' : display
+          if (stat.isDirectory) return `${display}/`
+          return matches.length === 1 ? `${display} ` : display
         } catch {
           return match
         }
-      })
+      }),
     )
 
     return [decorated, word]

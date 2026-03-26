@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { generateKeyPairSync } from 'node:crypto'
 import { rmSync } from 'node:fs'
 
@@ -72,10 +72,9 @@ export function buildImage(): void {
 /** Stop any leftover server containers from previous runs */
 function cleanupStaleContainers() {
   try {
-    const stale = execFileSync(
-      'docker', ['ps', '-q', '--filter', 'label=supabase-ssh-loadtest'],
-      { encoding: 'utf-8' }
-    ).trim()
+    const stale = execFileSync('docker', ['ps', '-q', '--filter', 'label=supabase-ssh-loadtest'], {
+      encoding: 'utf-8',
+    }).trim()
     if (stale) {
       console.log('Cleaning up stale server container...')
       execSync(`docker stop ${stale}`, { stdio: 'pipe' })
@@ -118,8 +117,10 @@ export async function startServer(config: ServerConfig = {}): Promise<RunningSer
   args.push('-e', 'NODE_OPTIONS=--expose-gc')
 
   // Generate a host key so the container doesn't need one on disk
-  const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 })
-    .privateKey.export({ type: 'pkcs1', format: 'pem' }) as string
+  const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
+    type: 'pkcs1',
+    format: 'pem',
+  }) as string
   args.push('-e', `SSH_HOST_KEY=${hostKey}`)
 
   // Environment variables
@@ -155,10 +156,9 @@ export async function startServer(config: ServerConfig = {}): Promise<RunningSer
 
 /** Get the host port mapped to a container port */
 function getHostPort(containerId: string, containerPort: number): number {
-  const output = execSync(
-    `docker port ${containerId} ${containerPort}/tcp`,
-    { encoding: 'utf-8' }
-  ).trim()
+  const output = execSync(`docker port ${containerId} ${containerPort}/tcp`, {
+    encoding: 'utf-8',
+  }).trim()
   // Format: "0.0.0.0:12345" or "[::]:12345"
   const match = output.match(/:(\d+)$/)
   if (!match) throw new Error(`Could not parse port from: ${output}`)
@@ -192,7 +192,9 @@ export async function ensureOtelCollector(): Promise<void> {
     } catch {
       // genuinely broken
     }
-    throw new Error('Failed to start OTel collector - port 4318 may be in use by a non-compose container')
+    throw new Error(
+      'Failed to start OTel collector - port 4318 may be in use by a non-compose container',
+    )
   }
 
   const deadline = Date.now() + 15_000
@@ -271,7 +273,11 @@ export async function ensureVictoriaMetrics(): Promise<void> {
 }
 
 /** Wait for SSH and metrics endpoints to be ready */
-async function waitForReady(sshPort: number, metricsUrl: string, timeoutMs = 30_000): Promise<void> {
+async function waitForReady(
+  sshPort: number,
+  metricsUrl: string,
+  timeoutMs = 30_000,
+): Promise<void> {
   const start = Date.now()
   const deadline = start + timeoutMs
 

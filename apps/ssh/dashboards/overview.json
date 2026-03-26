@@ -69,10 +69,7 @@
       "fieldConfig": {
         "defaults": {
           "thresholds": {
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ]
+            "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }]
           }
         }
       }
@@ -117,10 +114,7 @@
       "fieldConfig": {
         "defaults": {
           "thresholds": {
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ]
+            "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }]
           }
         }
       }

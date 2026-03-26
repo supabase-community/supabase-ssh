@@ -1,5 +1,5 @@
-import { connect, type ConnectedClient } from '../ssh-client.js'
-import { scrapeMetrics, METRIC_KEYS } from '../metrics-collector.js'
+import { METRIC_KEYS, scrapeMetrics } from '../metrics-collector.js'
+import { type ConnectedClient, connect } from '../ssh-client.js'
 
 export const description = 'Linear ramp to beyond hard limit - verify rejection curve'
 
@@ -75,7 +75,7 @@ export async function execute(opts: {
       })
 
       console.log(
-        `  Target: ${target} | Active: ${allClients.length} | Rejected: ${totalRejections} | Memory: ${(memory / 1024 / 1024).toFixed(1)}MB`
+        `  Target: ${target} | Active: ${allClients.length} | Rejected: ${totalRejections} | Memory: ${(memory / 1024 / 1024).toFixed(1)}MB`,
       )
 
       // Detect soft limit (first rejection)
@@ -107,7 +107,7 @@ export async function execute(opts: {
   console.log('-------|--------|----------|------|-------------|-------')
   for (const s of results) {
     console.log(
-      `${String(s.targetConnections).padStart(6)} | ${String(s.activeConnections).padStart(6)} | ${String(s.rejections.capacity).padStart(8)} | ${String(s.rejections.rateLimit).padStart(4)} | ${String(s.rejections.concurrency).padStart(11)} | ${(s.memoryBytes / 1024 / 1024).toFixed(1).padStart(5)}MB`
+      `${String(s.targetConnections).padStart(6)} | ${String(s.activeConnections).padStart(6)} | ${String(s.rejections.capacity).padStart(8)} | ${String(s.rejections.rateLimit).padStart(4)} | ${String(s.rejections.concurrency).padStart(11)} | ${(s.memoryBytes / 1024 / 1024).toFixed(1).padStart(5)}MB`,
     )
   }
 

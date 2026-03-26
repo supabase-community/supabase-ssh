@@ -1,8 +1,8 @@
 import { createInterface, type Interface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import type { Bash } from 'just-bash'
-import { createCompletionEngine, type CompletionEngine } from './completion.js'
 import type { CommandCompleteFn } from './completion.js'
+import { type CompletionEngine, createCompletionEngine } from './completion.js'
 
 export type { CommandCompleteFn } from './completion.js'
 
@@ -22,7 +22,7 @@ export interface ShellSessionOptions {
   /** Called when the session ends (Ctrl+D or stream closes). */
   onExit?: () => void
   /** Called before execution. Return false to skip exec (e.g. for 'exit' handling). */
-  beforeExec?: (command: string) => boolean | void
+  beforeExec?: (command: string) => boolean | undefined
   /** Called after each command completes with execution details. */
   afterExec?: (info: {
     command: string
@@ -44,7 +44,7 @@ export class ShellSession {
   #completion: CompletionEngine
   #promptFn: (cwd: string) => string
   #onExit?: () => void
-  #beforeExec?: (command: string) => boolean | void
+  #beforeExec?: (command: string) => boolean | undefined
   #afterExec?: ShellSessionOptions['afterExec']
   #output: Writable
   #execTimeout?: number
@@ -98,9 +98,7 @@ export class ShellSession {
     if (command) {
       const start = performance.now()
       try {
-        const signal = this.#execTimeout
-          ? AbortSignal.timeout(this.#execTimeout)
-          : undefined
+        const signal = this.#execTimeout ? AbortSignal.timeout(this.#execTimeout) : undefined
         const result = await this.#bash.exec(command, { cwd: this.#cwd, signal })
         if (result.stdout) this.#output.write(result.stdout.replace(/\n/g, '\r\n'))
         if (result.stderr) this.#output.write(result.stderr.replace(/\n/g, '\r\n'))

@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll } from 'vitest'
 import { Bash } from 'just-bash'
+import { beforeAll, describe, expect, it } from 'vitest'
 import {
+  type CommandCompleteFn,
+  createCompletionEngine,
   findCmdStart,
+  formatHits,
   parseCompletionContext,
   shellQuote,
-  formatHits,
-  createCompletionEngine,
-  type CommandCompleteFn,
 } from './completion.js'
 
 // ---------------------------------------------------------------------------
@@ -298,8 +298,7 @@ describe('createCompletionEngine', () => {
       }
       const engine = createCompletionEngine(bash, completeFn)
       await engine.complete('echo $(custom-cmd arg', '/home')
-      expect(captured!.command).toBe('custom-cmd')
-      expect(captured!.word).toBe('arg')
+      expect(captured).toEqual({ command: 'custom-cmd', word: 'arg' })
     })
 
     it('returns completeFn results as completions', async () => {

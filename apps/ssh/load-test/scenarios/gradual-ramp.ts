@@ -1,5 +1,5 @@
-import { run, type ScenarioConfig, type LatencyStats } from '../runner.js'
 import type { SessionProfile } from '../profiles/types.js'
+import { type LatencyStats, run, type ScenarioConfig } from '../runner.js'
 
 export const description = 'Gradual linear ramp simulating real traffic growth'
 
@@ -36,7 +36,7 @@ export async function execute(opts: {
   const rampDownSeconds = opts.rampDownSeconds ?? 0 // VUs exit on their own
 
   console.log(
-    `\nGradual Ramp - 0 → ${targetVUs} VUs over ${rampUpSeconds}s, hold ${holdSeconds}s, ramp down ${rampDownSeconds}s\n`
+    `\nGradual Ramp - 0 → ${targetVUs} VUs over ${rampUpSeconds}s, hold ${holdSeconds}s, ramp down ${rampDownSeconds}s\n`,
   )
 
   const config: ScenarioConfig = {
@@ -51,7 +51,7 @@ export async function execute(opts: {
     loop: false,
     onProgress: (stats) => {
       console.log(
-        `  [${stats.elapsedSeconds}s] VUs=${stats.activeVUs} cmds=${stats.totalCommands} errors=${stats.totalErrors} rejections=${stats.totalRejections}`
+        `  [${stats.elapsedSeconds}s] VUs=${stats.activeVUs} cmds=${stats.totalCommands} errors=${stats.totalErrors} rejections=${stats.totalRejections}`,
       )
     },
     progressIntervalMs: 15_000,
@@ -63,13 +63,13 @@ export async function execute(opts: {
 
   console.log('\n--- Summary ---')
   console.log(
-    `Target: ${targetVUs} VUs | Ramp up: ${rampUpSeconds}s | Hold: ${holdSeconds}s | Ramp down: ${rampDownSeconds}s`
+    `Target: ${targetVUs} VUs | Ramp up: ${rampUpSeconds}s | Hold: ${holdSeconds}s | Ramp down: ${rampDownSeconds}s`,
   )
   console.log(
-    `p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  p99=${result.commandLatency.p99.toFixed(0)}ms  max=${result.commandLatency.max.toFixed(0)}ms`
+    `p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  p99=${result.commandLatency.p99.toFixed(0)}ms  max=${result.commandLatency.max.toFixed(0)}ms`,
   )
   console.log(
-    `Commands: ${result.totalCommands} (${result.commandsPerSecond.toFixed(1)}/s) | Errors: ${result.serverErrors} | Rejections: ${totalRejections}`
+    `Commands: ${result.totalCommands} (${result.commandsPerSecond.toFixed(1)}/s) | Errors: ${result.serverErrors} | Rejections: ${totalRejections}`,
   )
   if (result.errorSamples.length > 0) {
     console.log('\n--- Errors ---')

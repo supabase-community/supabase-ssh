@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream'
-import { describe, it, expect, vi } from 'vitest'
 import { Bash } from 'just-bash'
+import { describe, expect, it, vi } from 'vitest'
 import { ShellSession, type ShellSessionOptions } from './session.js'
 
 const PROMPT_RE = /\$ $/
@@ -34,7 +34,7 @@ function waitForPrompt(output: PassThrough, timeout = 2000): Promise<string> {
     let buf = ''
     const timer = setTimeout(
       () => reject(new Error(`Timed out waiting for prompt. Got: ${JSON.stringify(buf)}`)),
-      timeout
+      timeout,
     )
     const onData = (chunk: string) => {
       buf += chunk
@@ -49,7 +49,7 @@ function waitForPrompt(output: PassThrough, timeout = 2000): Promise<string> {
 }
 
 function sendLine(input: PassThrough, cmd: string) {
-  input.write(cmd + '\n')
+  input.write(`${cmd}\n`)
 }
 
 // ---------------------------------------------------------------------------

@@ -19,9 +19,9 @@ import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 
-import { presets, resetOtelCollector, startServer, type RunningServer } from '../docker.js'
-import { parseProfile } from './parse-profile.js'
+import { presets, type RunningServer, resetOtelCollector, startServer } from '../docker.js'
 import { connect, exec } from '../ssh-client.js'
+import { parseProfile } from './parse-profile.js'
 
 // const require = createRequire(import.meta.url)
 // const SDK_CLI_PATH = join(dirname(require.resolve('@anthropic-ai/claude-agent-sdk')), 'cli.js')
@@ -38,7 +38,7 @@ const { values } = parseArgs({
 })
 
 const prompt = values.prompt ?? DEFAULT_PROMPT
-const useDocker = values.docker!
+const useDocker = values.docker ?? false
 
 // Create a temp working directory so Claude Code has somewhere to write files
 const workDir = mkdtempSync(join(tmpdir(), 'ssh-capture-'))
@@ -57,7 +57,7 @@ function writeSshWrapper(host: string, port: number) {
   StrictHostKeyChecking no
   UserKnownHostsFile /dev/null
   LogLevel ERROR
-`
+`,
   )
 
   const binDir = join(workDir, '.bin')
@@ -81,8 +81,8 @@ writeFileSync(
       },
     },
     null,
-    2
-  )
+    2,
+  ),
 )
 
 writeFileSync(
@@ -99,8 +99,8 @@ writeFileSync(
       },
     },
     null,
-    2
-  )
+    2,
+  ),
 )
 
 /** Pull text out of a tool_result content field (string or content block array) */
@@ -113,7 +113,7 @@ function extractToolResultText(content: unknown): string | null {
           typeof b === 'object' &&
           b !== null &&
           'type' in b &&
-          (b as { type: string }).type === 'text'
+          (b as { type: string }).type === 'text',
       )
       .map((b: unknown) => (b as { text: string }).text)
     return texts.length > 0 ? texts.join('') : null
@@ -124,7 +124,7 @@ function extractToolResultText(content: unknown): string | null {
 /** Format tool arguments for log output */
 function formatToolArgs(name: string, input: Record<string, unknown>): string {
   if (name === 'Bash' && typeof input.command === 'string') {
-    return input.command.length > 200 ? input.command.slice(0, 200) + '...' : input.command
+    return input.command.length > 200 ? `${input.command.slice(0, 200)}...` : input.command
   }
   if (name === 'Read' && typeof input.file_path === 'string') return input.file_path
   if (name === 'Write' && typeof input.file_path === 'string') return input.file_path
@@ -132,14 +132,14 @@ function formatToolArgs(name: string, input: Record<string, unknown>): string {
   if (name === 'Glob' && typeof input.pattern === 'string') return input.pattern
   if (name === 'Grep' && typeof input.pattern === 'string') return input.pattern
   const json = JSON.stringify(input)
-  return json.length > 200 ? json.slice(0, 200) + '...' : json
+  return json.length > 200 ? `${json.slice(0, 200)}...` : json
 }
 
 let server: RunningServer | null = null
 
 async function main() {
-  let host = values.host!
-  let port = parseInt(values.port!, 10)
+  let host = values.host ?? 'localhost'
+  let port = parseInt(values.port ?? '2222', 10)
 
   if (useDocker) {
     console.log('Starting OTel collector + SSH server via Docker...')
@@ -161,7 +161,7 @@ async function main() {
   client.end()
 
   // Write CLAUDE.md so the agent discovers SSH docs the same way a real developer would
-  writeFileSync(join(workDir, 'CLAUDE.md'), agentsOutput.trim() + '\n')
+  writeFileSync(join(workDir, 'CLAUDE.md'), `${agentsOutput.trim()}\n`)
   console.log(`Wrote CLAUDE.md (${agentsOutput.trim().split('\n').length} lines)`)
 
   console.log(`\nCapture session`)
@@ -299,7 +299,8 @@ main()
       console.warn(`Warning: could not clean up ${workDir}`)
     }
     // Parse spans into session profile
-    const spansPath = join(import.meta.dirname!, '..', 'traces', 'spans.json')
-    const profilePath = join(import.meta.dirname!, '..', 'profiles', 'captured-agent.json')
+    const dir = import.meta.dirname ?? __dirname
+    const spansPath = join(dir, '..', 'traces', 'spans.json')
+    const profilePath = join(dir, '..', 'profiles', 'captured-agent.json')
     parseProfile(spansPath, profilePath)
   })

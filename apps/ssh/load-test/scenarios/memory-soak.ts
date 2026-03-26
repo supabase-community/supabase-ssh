@@ -1,11 +1,11 @@
-import { run, type ScenarioConfig } from '../runner.js'
 import {
-  queryRange,
   isVictoriaMetricsAvailable,
-  scrapeMetrics,
   METRIC_KEYS,
+  queryRange,
+  scrapeMetrics,
 } from '../metrics-collector.js'
 import type { SessionProfile } from '../profiles/types.js'
+import { run, type ScenarioConfig } from '../runner.js'
 
 export const description = 'Long duration test to detect memory leaks'
 
@@ -44,7 +44,9 @@ export async function execute(opts: {
   const useVM = await isVictoriaMetricsAvailable()
 
   console.log(`\nMemory Soak - ${vus} VUs, ${duration}s duration`)
-  console.log(`  Metrics source: ${useVM ? 'VictoriaMetrics (5s scrape)' : 'direct polling (10s)'}\n`)
+  console.log(
+    `  Metrics source: ${useVM ? 'VictoriaMetrics (5s scrape)' : 'direct polling (10s)'}\n`,
+  )
 
   const startUnix = Math.floor(Date.now() / 1000)
 
@@ -127,9 +129,13 @@ export async function execute(opts: {
   const slopeMBPerMin = slope * 60
 
   console.log('\n--- Summary ---')
-  console.log(`  Duration: ${duration}s | Samples: ${samples.length} (${postWarmup.length} post-warmup)`)
+  console.log(
+    `  Duration: ${duration}s | Samples: ${samples.length} (${postWarmup.length} post-warmup)`,
+  )
   console.log(`  Source: ${source}`)
-  console.log(`  Start: ${startMemory.toFixed(1)}MB | End: ${endMemory.toFixed(1)}MB | Peak: ${peakMemory.toFixed(1)}MB`)
+  console.log(
+    `  Start: ${startMemory.toFixed(1)}MB | End: ${endMemory.toFixed(1)}MB | Peak: ${peakMemory.toFixed(1)}MB`,
+  )
   console.log(`  Growth: ${(endMemory - startMemory).toFixed(1)}MB`)
   console.log(`  Slope: ${slopeMBPerMin.toFixed(3)} MB/min`)
   console.log(`  Likely leak: ${Math.abs(slopeMBPerMin) > 0.5 ? 'YES' : 'no'}`)
@@ -148,7 +154,7 @@ export async function execute(opts: {
 
 /** Linear regression slope (y = MB, x = elapsed seconds). Returns MB/second. */
 function linearRegressionSlope(
-  samples: Array<{ elapsedSeconds: number; memoryMB: number }>
+  samples: Array<{ elapsedSeconds: number; memoryMB: number }>,
 ): number {
   if (samples.length < 2) return 0
 

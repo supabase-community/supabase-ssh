@@ -1,10 +1,10 @@
+import { type ChildProcess, spawn } from 'node:child_process'
 import { generateKeyPairSync } from 'node:crypto'
-import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve, join } from 'node:path'
-import { describe, it, expect, afterEach } from 'vitest'
+import { join, resolve } from 'node:path'
 import { Client } from 'ssh2'
+import { afterEach, describe, expect, it } from 'vitest'
 
 const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
   type: 'pkcs1',
@@ -39,7 +39,7 @@ function spawnServer(): Promise<{ proc: ChildProcess; port: number }> {
       reject(new Error(`Server didn't start in time. stdout: ${stdout}, stderr: ${stderr}`))
     }, 10_000)
 
-    proc.stdout!.on('data', (data: Buffer) => {
+    proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
       const match = stdout.match(/SSH server listening on port (\d+)/)
       if (match) {
@@ -48,7 +48,7 @@ function spawnServer(): Promise<{ proc: ChildProcess; port: number }> {
       }
     })
 
-    proc.stderr!.on('data', (data: Buffer) => {
+    proc.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
 
@@ -76,10 +76,7 @@ function connectClient(port: number): Promise<Client> {
   })
 }
 
-function execCommand(
-  client: Client,
-  command: string
-): Promise<{ stdout: string; code: number }> {
+function execCommand(client: Client, command: string): Promise<{ stdout: string; code: number }> {
   return new Promise((resolve, reject) => {
     client.exec(command, (err, stream) => {
       if (err) return reject(err)
@@ -151,7 +148,7 @@ describe('Server process', () => {
         // Wait for shell to be ready, then send SIGTERM
         const waitForPrompt = () => {
           if (buf.includes('$ ')) {
-            proc!.kill('SIGTERM')
+            proc?.kill('SIGTERM')
           } else {
             setTimeout(waitForPrompt, 50)
           }
@@ -187,7 +184,7 @@ describe('Server process', () => {
         stream.stderr.on('data', onData)
         const waitForPrompt = () => {
           if (buf.includes('$ ')) {
-            proc!.kill('SIGINT')
+            proc?.kill('SIGINT')
           } else {
             setTimeout(waitForPrompt, 50)
           }

@@ -1,4 +1,4 @@
-import { InitialFiles, InMemoryFs, MountableFs, type MountableFsOptions } from 'just-bash'
+import { type InitialFiles, InMemoryFs, MountableFs, type MountableFsOptions } from 'just-bash'
 
 interface ExtendedMountableFsOptions extends Omit<MountableFsOptions, 'base'> {
   readOnly?: boolean

@@ -1,8 +1,8 @@
 import { generateKeyPairSync } from 'node:crypto'
-import { Client } from 'ssh2'
-import { connect, exec, type ConnectedClient } from './ssh-client.js'
-import { scrapeMetrics, scrapeHealth, computeDeltas, type MetricsSnapshot } from './metrics-collector.js'
+import type { Client } from 'ssh2'
+import { computeDeltas, type MetricsSnapshot, scrapeMetrics } from './metrics-collector.js'
 import type { SessionProfile } from './profiles/types.js'
+import { type ConnectedClient, connect, exec } from './ssh-client.js'
 
 export interface ScenarioConfig {
   /** Target SSH host */
@@ -102,71 +102,71 @@ async function runVU(
   },
   stopSignal: { stopped: boolean },
   activeClients: Set<Client>,
-  activeVUCount: { value: number }
+  activeVUCount: { value: number },
 ): Promise<void> {
   activeVUCount.value++
   try {
-  while (!stopSignal.stopped) {
-    // Replay profile commands - fresh SSH connection per command (like real agents)
-    const vuStart = performance.now()
-    for (const cmd of config.profile.commands) {
-      if (stopSignal.stopped) break
+    while (!stopSignal.stopped) {
+      // Replay profile commands - fresh SSH connection per command (like real agents)
+      const vuStart = performance.now()
+      for (const cmd of config.profile.commands) {
+        if (stopSignal.stopped) break
 
-      const elapsed = performance.now() - vuStart
-      const wait = cmd.offset - elapsed
-      if (wait > 0) {
-        await sleep(wait)
-      }
-      if (stopSignal.stopped) break
-
-      let connected: ConnectedClient | null = null
-      try {
-        connected = await connect({
-          host: config.host,
-          port: config.port,
-        })
-        collectors.connections++
-
-        if (connected.rejected) {
-          const type = connected.rejectionType
-          if (type === 'capacity') collectors.rejections.capacity++
-          else if (type === 'rate_limit') collectors.rejections.rateLimit++
-          else if (type === 'concurrency') collectors.rejections.concurrency++
-          continue
+        const elapsed = performance.now() - vuStart
+        const wait = cmd.offset - elapsed
+        if (wait > 0) {
+          await sleep(wait)
         }
+        if (stopSignal.stopped) break
 
-        activeClients.add(connected.client)
-        collectors.connectTimes.push(connected.connectTimeMs)
-
+        let connected: ConnectedClient | null = null
         try {
-          const result = await exec(connected.client, cmd.command)
-          collectors.commands++
-          if (result.timedOut) {
-            collectors.timeouts++
-          } else {
-            collectors.commandTimes.push(result.commandTimeMs)
-            if (result.exitCode !== 0) {
-              collectors.nonZeroExits++
+          connected = await connect({
+            host: config.host,
+            port: config.port,
+          })
+          collectors.connections++
+
+          if (connected.rejected) {
+            const type = connected.rejectionType
+            if (type === 'capacity') collectors.rejections.capacity++
+            else if (type === 'rate_limit') collectors.rejections.rateLimit++
+            else if (type === 'concurrency') collectors.rejections.concurrency++
+            continue
+          }
+
+          activeClients.add(connected.client)
+          collectors.connectTimes.push(connected.connectTimeMs)
+
+          try {
+            const result = await exec(connected.client, cmd.command)
+            collectors.commands++
+            if (result.timedOut) {
+              collectors.timeouts++
+            } else {
+              collectors.commandTimes.push(result.commandTimeMs)
+              if (result.exitCode !== 0) {
+                collectors.nonZeroExits++
+              }
             }
+          } catch (err) {
+            collectors.serverErrors++
+            collectors.errorSamples.push({ type: 'exec', message: String(err) })
           }
         } catch (err) {
           collectors.serverErrors++
-          collectors.errorSamples.push({ type: 'exec', message: String(err) })
-        }
-      } catch (err) {
-        collectors.serverErrors++
-        collectors.errorSamples.push({ type: 'connect', message: String(err) })
-      } finally {
-        if (connected?.client) {
-          activeClients.delete(connected.client)
-          connected.client.end()
-          connected.client.destroy()
+          collectors.errorSamples.push({ type: 'connect', message: String(err) })
+        } finally {
+          if (connected?.client) {
+            activeClients.delete(connected.client)
+            connected.client.end()
+            connected.client.destroy()
+          }
         }
       }
-    }
 
-    if (!config.loop) break
-  }
+      if (!config.loop) break
+    }
   } finally {
     activeVUCount.value--
   }
@@ -210,7 +210,7 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
   if (config.onProgress) {
     const interval = config.progressIntervalMs ?? 5000
     progressTimer = setInterval(() => {
-      config.onProgress!({
+      config.onProgress?.({
         elapsedSeconds: Math.round((performance.now() - startTime) / 1000),
         activeVUs: activeVUCount.value,
         totalConnections: collectors.connections,
@@ -267,7 +267,7 @@ export async function run(config: ScenarioConfig): Promise<ScenarioResult> {
   ])
 
   // Force-destroy any connections still open after grace period
-  activeClients.forEach((client) => client.destroy())
+  for (const client of activeClients) client.destroy()
   activeClients.clear()
 
   if (progressTimer) clearInterval(progressTimer)

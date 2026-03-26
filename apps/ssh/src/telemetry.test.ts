@@ -1,11 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { trace } from '@opentelemetry/api'
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base'
-import { createSessionContext, startCommandSpan, endCommandSpan, recordConnectionRejected } from './telemetry.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  createSessionContext,
+  endCommandSpan,
+  recordConnectionRejected,
+  startCommandSpan,
+} from './telemetry.js'
 
 // -- createSessionContext --
 

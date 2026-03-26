@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { connect, exec } from '../ssh-client.js'
 import { generateHostKey } from '../runner.js'
+import { connect, exec } from '../ssh-client.js'
 
 export const description = 'Server restart during active load - verify drain behavior'
 
@@ -34,32 +34,28 @@ export async function execute(opts: {
 
   // Spawn server as child process
   const sshRoot = join(import.meta.dirname, '..')
-  const serverProcess = spawn(
-    'node',
-    ['--import', 'tsx', 'src/server.ts'],
-    {
-      cwd: sshRoot,
-      env: {
-        ...process.env,
-        PORT: String(port),
-        METRICS_PORT: '0', // Disable metrics for this test
-        SSH_HOST_KEY: hostKey.toString('utf-8'),
-        IDLE_TIMEOUT: '30000',
-        SESSION_TIMEOUT: '60000',
-        EXEC_TIMEOUT: '10000',
-        MAX_CONNECTIONS: '50',
-        DRAIN_TIMEOUT: String(drainTimeout),
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }
-  )
+  const serverProcess = spawn('node', ['--import', 'tsx', 'src/server.ts'], {
+    cwd: sshRoot,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      METRICS_PORT: '0', // Disable metrics for this test
+      SSH_HOST_KEY: hostKey.toString('utf-8'),
+      IDLE_TIMEOUT: '30000',
+      SESSION_TIMEOUT: '60000',
+      EXEC_TIMEOUT: '10000',
+      MAX_CONNECTIONS: '50',
+      DRAIN_TIMEOUT: String(drainTimeout),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
 
-  let serverOutput = ''
+  let _serverOutput = ''
   serverProcess.stdout?.on('data', (data: Buffer) => {
-    serverOutput += data.toString()
+    _serverOutput += data.toString()
   })
   serverProcess.stderr?.on('data', (data: Buffer) => {
-    serverOutput += data.toString()
+    _serverOutput += data.toString()
   })
 
   // Wait for server to start

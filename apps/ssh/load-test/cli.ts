@@ -1,8 +1,8 @@
-import { parseArgs } from 'node:util'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { parseArgs } from 'node:util'
+import { ensureVictoriaMetrics, presets, type RunningServer, startServer } from './docker.js'
 import type { SessionProfile } from './profiles/types.js'
-import { startServer, ensureVictoriaMetrics, presets, type RunningServer } from './docker.js'
 
 const TIER1_SCENARIOS = new Set([
   'latency-under-load',
@@ -108,12 +108,13 @@ async function main() {
   const profile = loadProfile(values.profile)
   const vus = values.vus ? parseInt(values.vus, 10) : undefined
   const duration = values.duration ? parseInt(values.duration, 10) : undefined
-  const useDocker = values.docker || !!values.memory || !!values.cpus || (values.env?.length ?? 0) > 0
+  const useDocker =
+    values.docker || !!values.memory || !!values.cpus || (values.env?.length ?? 0) > 0
 
   let server: RunningServer | null = null
-  let host = values.host!
-  let port = parseInt(values.port!, 10)
-  let metricsUrl = values.metrics!
+  let host = values.host ?? '127.0.0.1'
+  let port = parseInt(values.port ?? '2222', 10)
+  let metricsUrl = values.metrics ?? 'http://localhost:9091'
 
   if (useDocker) {
     // Parse extra env vars from --env K=V
@@ -132,7 +133,7 @@ async function main() {
 
     // Merge extra env on top of preset
     if (isDiscovery && Object.keys(extraEnv).length > 0) {
-      Object.assign(preset.env!, extraEnv)
+      Object.assign(preset.env ?? {}, extraEnv)
     }
     if (!isDiscovery && values.memory) {
       preset.memory = values.memory
@@ -141,8 +142,15 @@ async function main() {
       preset.cpus = values.cpus
     }
 
-    const constraints = [values.memory ? `${values.memory} RAM` : '', values.cpus ? `${values.cpus} CPU` : ''].filter(Boolean).join(', ')
-    console.log(`\nStarting Docker server (${isDiscovery ? 'discovery' : 'validation'} preset${constraints ? `, ${constraints}` : ''})...`)
+    const constraints = [
+      values.memory ? `${values.memory} RAM` : '',
+      values.cpus ? `${values.cpus} CPU` : '',
+    ]
+      .filter(Boolean)
+      .join(', ')
+    console.log(
+      `\nStarting Docker server (${isDiscovery ? 'discovery' : 'validation'} preset${constraints ? `, ${constraints}` : ''})...`,
+    )
     await ensureVictoriaMetrics()
     server = await startServer(preset)
     host = '127.0.0.1'
@@ -161,7 +169,13 @@ async function main() {
 
     switch (scenarioName) {
       case 'latency-under-load':
-        await mod.execute({ host, port, metricsUrl, profile, ...(duration ? { stepDurationSeconds: duration } : {}) })
+        await mod.execute({
+          host,
+          port,
+          metricsUrl,
+          profile,
+          ...(duration ? { stepDurationSeconds: duration } : {}),
+        })
         break
       case 'idle-pressure':
         await mod.execute({ host, port, metricsUrl })
@@ -170,13 +184,30 @@ async function main() {
         await mod.execute({ host, port, metricsUrl, profile, vus, durationSeconds: duration })
         break
       case 'expensive-commands':
-        await mod.execute({ host, port, metricsUrl, ...(duration ? { stepDurationSeconds: duration } : {}) })
+        await mod.execute({
+          host,
+          port,
+          metricsUrl,
+          ...(duration ? { stepDurationSeconds: duration } : {}),
+        })
         break
       case 'session-churn':
-        await mod.execute({ host, port, metricsUrl, ...(duration ? { stepDurationSeconds: duration } : {}) })
+        await mod.execute({
+          host,
+          port,
+          metricsUrl,
+          ...(duration ? { stepDurationSeconds: duration } : {}),
+        })
         break
       case 'gradual-ramp':
-        await mod.execute({ host, port, metricsUrl, profile, targetVUs: vus, holdSeconds: duration })
+        await mod.execute({
+          host,
+          port,
+          metricsUrl,
+          profile,
+          targetVUs: vus,
+          holdSeconds: duration,
+        })
         break
       case 'connection-ramp':
         await mod.execute({ host, port, metricsUrl })

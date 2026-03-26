@@ -1,4 +1,4 @@
-import { connect, exec, type ConnectedClient } from '../ssh-client.js'
+import { type ConnectedClient, connect } from '../ssh-client.js'
 
 export const description = 'Verify per-IP concurrent connection limit enforcement'
 
@@ -23,7 +23,9 @@ export async function execute(opts: {
   const expectedLimit = opts.expectedLimit ?? 10
   const attemptCount = Math.ceil(expectedLimit * 1.5)
 
-  console.log(`\nPer-IP Concurrency - attempting ${attemptCount} connections (limit: ${expectedLimit})\n`)
+  console.log(
+    `\nPer-IP Concurrency - attempting ${attemptCount} connections (limit: ${expectedLimit})\n`,
+  )
 
   const clients: ConnectedClient[] = []
   let rejectedCount = 0
@@ -55,9 +57,9 @@ export async function execute(opts: {
   let reconnectOk = false
   if (clients.length > 0) {
     console.log('\n  Disconnecting 1 client...')
-    const removed = clients.pop()!
-    removed.client.end()
-    removed.client.destroy()
+    const removed = clients.pop()
+    removed?.client.end()
+    removed?.client.destroy()
     await new Promise((resolve) => setTimeout(resolve, 500))
 
     console.log('  Attempting reconnect...')

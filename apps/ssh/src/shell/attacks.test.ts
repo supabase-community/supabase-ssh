@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { Bash } from 'just-bash'
-import { ExtendedMountableFs } from './extended-mountable-fs.js'
+import { describe, expect, it } from 'vitest'
 import { EXECUTION_LIMITS } from './bash.js'
+import { ExtendedMountableFs } from './extended-mountable-fs.js'
 
 function createTestBash(files: Record<string, string> = {}) {
   return new Bash({
@@ -41,7 +41,7 @@ describe('Attack: infinite loops', () => {
   it('nested loops multiply but are still bounded', async () => {
     const bash = createTestBash()
     const result = await bash.exec(
-      'for i in $(seq 1 100); do for j in $(seq 1 100); do echo "$i.$j"; done; done'
+      'for i in $(seq 1 100); do for j in $(seq 1 100); do echo "$i.$j"; done; done',
     )
     // Inner loop runs 100 * 100 = 10000 iters but maxLoopIterations is 1000 per loop
     // so it depends on how just-bash counts - either loop limit or command count
@@ -53,7 +53,7 @@ describe('Attack: output flooding', () => {
   it('massive echo output is stopped by maxOutputSize', async () => {
     const bash = createTestBash()
     const result = await bash.exec(
-      'x=$(printf "A%.0s" {1..1000}); for i in $(seq 1 2000); do echo "$x"; done'
+      'x=$(printf "A%.0s" {1..1000}); for i in $(seq 1 2000); do echo "$x"; done',
     )
     expect(result.stderr).toMatch(/output size|too many iterations|too many commands/i)
   })
@@ -61,7 +61,7 @@ describe('Attack: output flooding', () => {
   it('yes-like output is bounded to ~1MB', async () => {
     const bash = createTestBash()
     const result = await bash.exec(
-      'while true; do echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; done'
+      'while true; do echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; done',
     )
     const totalOutput = (result.stdout?.length ?? 0) + (result.stderr?.length ?? 0)
     // 1MB + margin for the error message
@@ -73,9 +73,11 @@ describe('Attack: string/memory amplification', () => {
   it('exponential string growth is stopped by maxStringLength', async () => {
     const bash = createTestBash()
     const result = await bash.exec(
-      'x="AAAAAAAAAA"; for i in $(seq 1 25); do x="$x$x"; done; echo ${#x}'
+      'x="AAAAAAAAAA"; for i in $(seq 1 25); do x="$x$x"; done; echo ${#x}',
     )
-    expect(result.stderr).toMatch(/string length|too many iterations|too many commands|output size/i)
+    expect(result.stderr).toMatch(
+      /string length|too many iterations|too many commands|output size/i,
+    )
   })
 
   it('brace expansion bomb is bounded', async () => {
@@ -87,14 +89,14 @@ describe('Attack: string/memory amplification', () => {
     expect(
       result.stderr.includes('limit') ||
         result.stderr.includes('brace') ||
-        totalOutput <= 1024 * 1024 + 4096
+        totalOutput <= 1024 * 1024 + 4096,
     ).toBe(true)
   })
 
   it('large array construction is bounded', async () => {
     const bash = createTestBash()
     const result = await bash.exec(
-      'arr=(); for i in $(seq 1 20000); do arr+=("$i"); done; echo ${#arr[@]}'
+      'arr=(); for i in $(seq 1 20000); do arr+=("$i"); done; echo ${#arr[@]}',
     )
     expect(result.stderr).toMatch(/array|too many iterations|too many commands/i)
   })
@@ -104,10 +106,12 @@ describe('Attack: string/memory amplification', () => {
     // 1000 chars * 10 = 10000 chars, then //A/AAAA = 40000 chars - under 1MB limit
     // Use larger base to actually hit the limit
     const result = await bash.exec(
-      'x=$(printf "A%.0s" {1..1000}); for i in 1 2 3 4 5 6 7 8 9 10; do x="$x$x"; done; echo "${x//A/AAAA}" | wc -c'
+      'x=$(printf "A%.0s" {1..1000}); for i in 1 2 3 4 5 6 7 8 9 10; do x="$x$x"; done; echo "${x//A/AAAA}" | wc -c',
     )
     // Should hit string length limit or output size limit
-    expect(result.stderr).toMatch(/string length|output size|too many commands|too many iterations/i)
+    expect(result.stderr).toMatch(
+      /string length|output size|too many commands|too many iterations/i,
+    )
   })
 })
 
@@ -119,10 +123,9 @@ describe('Attack: abort signal / timeout', () => {
     // The loop hits maxCommandCount (1000) or the abort signal - whichever first.
     // just-bash returns a result with error in stderr rather than throwing.
     const resultOrError = await bash
-      .exec(
-        'for i in $(seq 1 1000); do for j in $(seq 1 1000); do echo "$i.$j"; done; done',
-        { signal }
-      )
+      .exec('for i in $(seq 1 1000); do for j in $(seq 1 1000); do echo "$i.$j"; done; done', {
+        signal,
+      })
       .catch((err: Error) => err)
     const elapsed = performance.now() - start
     expect(elapsed).toBeLessThan(5000)
@@ -140,10 +143,7 @@ describe('Attack: abort signal / timeout', () => {
     const bash = createTestBash()
     const signal = AbortSignal.timeout(500)
     const resultOrError = await bash
-      .exec(
-        'for i in $(seq 1 1000); do x=$(echo "$(echo "$(echo "$i")")"); done',
-        { signal }
-      )
+      .exec('for i in $(seq 1 1000); do x=$(echo "$(echo "$(echo "$i")")"); done', { signal })
       .catch((err: Error) => err)
 
     if (resultOrError instanceof Error) {
@@ -209,9 +209,7 @@ describe('Attack: read-only filesystem', () => {
   it('cannot write files', async () => {
     const bash = createTestBash()
     // EROFS may throw as an unhandled exception or return in stderr
-    const resultOrError = await bash
-      .exec('echo "pwned" > /tmp/evil.sh')
-      .catch((err: Error) => err)
+    const resultOrError = await bash.exec('echo "pwned" > /tmp/evil.sh').catch((err: Error) => err)
     if (resultOrError instanceof Error) {
       expect(resultOrError.message).toMatch(/read-only|EROFS/i)
     } else {
@@ -247,8 +245,8 @@ describe('Attack: concurrent execution fairness', () => {
 
     const results = await Promise.all(
       instances.map((bash) =>
-        bash.exec('for i in $(seq 1 500); do x=$((i * 2)); done; echo "done"')
-      )
+        bash.exec('for i in $(seq 1 500); do x=$((i * 2)); done; echo "done"'),
+      ),
     )
 
     const elapsed = performance.now() - start
@@ -257,7 +255,7 @@ describe('Attack: concurrent execution fairness', () => {
       expect(
         result.stdout.includes('done') ||
           result.stderr.includes('limit') ||
-          result.stderr.includes('too many')
+          result.stderr.includes('too many'),
       ).toBe(true)
     }
 
@@ -286,7 +284,9 @@ describe('Attack: glob exhaustion', () => {
     const result = await bash.exec('ls /home/docs/*/*.md 2>&1; echo "done"')
     // Should either succeed within limits or hit the glob limit
     expect(
-      result.stdout.includes('done') || result.stderr.includes('limit') || result.stderr.includes('glob')
+      result.stdout.includes('done') ||
+        result.stderr.includes('limit') ||
+        result.stderr.includes('glob'),
     ).toBe(true)
   })
 })

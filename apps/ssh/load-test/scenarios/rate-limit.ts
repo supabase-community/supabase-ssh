@@ -26,7 +26,9 @@ export async function execute(opts: {
   const windowSeconds = opts.expectedWindowSeconds ?? 60
   const attempts = Math.ceil(maxPerWindow * 1.5)
 
-  console.log(`\nRate Limit - ${attempts} rapid connections (limit: ${maxPerWindow}/${windowSeconds}s)\n`)
+  console.log(
+    `\nRate Limit - ${attempts} rapid connections (limit: ${maxPerWindow}/${windowSeconds}s)\n`,
+  )
 
   let successful = 0
   let rejected = 0

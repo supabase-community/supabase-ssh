@@ -1,5 +1,5 @@
-import { run, type ScenarioConfig, type ScenarioResult, type LatencyStats } from '../runner.js'
 import type { SessionProfile } from '../profiles/types.js'
+import { type LatencyStats, run, type ScenarioConfig } from '../runner.js'
 
 export const description = 'Step ramp to find latency cliff and timeout onset'
 
@@ -67,7 +67,7 @@ export async function execute(opts: {
     })
 
     console.log(
-      `    p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  p99=${result.commandLatency.p99.toFixed(0)}ms  errors=${result.serverErrors}  rejections=${totalRejections}`
+      `    p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  p99=${result.commandLatency.p99.toFixed(0)}ms  errors=${result.serverErrors}  rejections=${totalRejections}`,
     )
   }
 
@@ -89,13 +89,13 @@ export async function execute(opts: {
   for (const s of results) {
     const l = s.commandLatency
     console.log(
-      `${String(s.vus).padStart(4)} | ${l.p50.toFixed(0).padStart(5)}ms ${l.p95.toFixed(0).padStart(5)}ms ${l.p99.toFixed(0).padStart(5)}ms ${l.max.toFixed(0).padStart(5)}ms | ${s.commandsPerSecond.toFixed(1).padStart(6)} | ${String(s.errors).padStart(6)} | ${String(s.rejections).padStart(10)}`
+      `${String(s.vus).padStart(4)} | ${l.p50.toFixed(0).padStart(5)}ms ${l.p95.toFixed(0).padStart(5)}ms ${l.p99.toFixed(0).padStart(5)}ms ${l.max.toFixed(0).padStart(5)}ms | ${s.commandsPerSecond.toFixed(1).padStart(6)} | ${String(s.errors).padStart(6)} | ${String(s.rejections).padStart(10)}`,
     )
   }
 
   if (inflectionPoint) {
     console.log(
-      `\nInflection point: ${inflectionPoint.vus} VUs (p95 = ${inflectionPoint.p95Ms.toFixed(0)}ms, >2x baseline)`
+      `\nInflection point: ${inflectionPoint.vus} VUs (p95 = ${inflectionPoint.p95Ms.toFixed(0)}ms, >2x baseline)`,
     )
   } else {
     console.log('\nNo inflection point detected within tested range')

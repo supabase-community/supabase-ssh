@@ -1,5 +1,5 @@
-import type { ScenarioResult, LatencyStats } from './runner.js'
 import { METRIC_KEYS } from './metrics-collector.js'
+import type { LatencyStats, ScenarioResult } from './runner.js'
 
 /** Format a latency stats object as a compact string */
 function fmtLatency(stats: LatencyStats): string {
@@ -36,11 +36,11 @@ export function formatReport(result: ScenarioResult, opts: ReportOptions): strin
     result.rejections.capacity + result.rejections.rateLimit + result.rejections.concurrency
   lines.push('Connections:')
   lines.push(
-    `  Total: ${result.totalConnections}  Successful: ${result.successfulConnections}  Rejected: ${totalRejections}`
+    `  Total: ${result.totalConnections}  Successful: ${result.successfulConnections}  Rejected: ${totalRejections}`,
   )
   if (totalRejections > 0) {
     lines.push(
-      `  Rejections: capacity=${result.rejections.capacity}  rate_limit=${result.rejections.rateLimit}  concurrency=${result.rejections.concurrency}`
+      `  Rejections: capacity=${result.rejections.capacity}  rate_limit=${result.rejections.rateLimit}  concurrency=${result.rejections.concurrency}`,
     )
   }
   lines.push('')
@@ -48,7 +48,7 @@ export function formatReport(result: ScenarioResult, opts: ReportOptions): strin
   // Commands
   lines.push('Commands:')
   lines.push(
-    `  Total: ${result.totalCommands}  Completed: ${result.completedCommands}  Server Errors: ${result.serverErrors}  Non-zero Exits: ${result.nonZeroExits}`
+    `  Total: ${result.totalCommands}  Completed: ${result.completedCommands}  Server Errors: ${result.serverErrors}  Non-zero Exits: ${result.nonZeroExits}`,
   )
   lines.push(`  Throughput: ${result.commandsPerSecond.toFixed(2)} cmd/s`)
   lines.push('')
@@ -87,9 +87,7 @@ export function formatReport(result: ScenarioResult, opts: ReportOptions): strin
 
     // Memory (point-in-time, not delta)
     if (result.metricsAfter?.parsed[METRIC_KEYS.processMemory]) {
-      lines.push(
-        `  Memory: ${fmtBytes(result.metricsAfter.parsed[METRIC_KEYS.processMemory])}`
-      )
+      lines.push(`  Memory: ${fmtBytes(result.metricsAfter.parsed[METRIC_KEYS.processMemory])}`)
     }
     lines.push('')
   }
@@ -108,6 +106,6 @@ export function formatJSON(result: ScenarioResult, opts: ReportOptions): string 
       metricsAfter: undefined,
     },
     null,
-    2
+    2,
   )
 }

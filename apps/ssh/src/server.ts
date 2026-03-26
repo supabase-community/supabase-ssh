@@ -54,7 +54,9 @@ async function main() {
       : undefined
 
   if (rateLimiter) {
-    console.log(`Rate limiting enabled (${RATE_LIMIT_MAX} connections/${RATE_LIMIT_WINDOW_SECONDS}s per IP)`)
+    console.log(
+      `Rate limiting enabled (${RATE_LIMIT_MAX} connections/${RATE_LIMIT_WINDOW_SECONDS}s per IP)`,
+    )
   } else {
     console.log('Rate limiting disabled (no UPSTASH_REDIS_REST_URL configured)')
   }
@@ -84,7 +86,10 @@ async function main() {
   async function gracefulShutdown(signal: string) {
     console.log(`${signal} received`)
     await Promise.all([
-      srv.close('\r\n\r\nQuick update in progress - reconnect in a few seconds!\r\n\r\n', DRAIN_TIMEOUT),
+      srv.close(
+        '\r\n\r\nQuick update in progress - reconnect in a few seconds!\r\n\r\n',
+        DRAIN_TIMEOUT,
+      ),
       new Promise<void>((resolve) => httpServer.close(() => resolve())),
       shutdownTelemetry(),
     ])

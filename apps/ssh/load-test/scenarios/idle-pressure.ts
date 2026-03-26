@@ -1,7 +1,8 @@
-import { connect, type ConnectedClient } from '../ssh-client.js'
-import { scrapeMetrics, triggerGC, METRIC_KEYS } from '../metrics-collector.js'
+import { METRIC_KEYS, scrapeMetrics, triggerGC } from '../metrics-collector.js'
+import { type ConnectedClient, connect } from '../ssh-client.js'
 
-export const description = 'Ramp idle connections to find memory ceiling and per-connection overhead'
+export const description =
+  'Ramp idle connections to find memory ceiling and per-connection overhead'
 
 export interface IdlePressureResult {
   baselineMemoryBytes: number
@@ -80,7 +81,8 @@ export async function execute(opts: {
       const activeConns = allClients.length
 
       // Compute per-connection overhead as delta from previous step
-      const prevMemory = results.length > 0 ? results[results.length - 1].memoryBytes : baselineMemory
+      const prevMemory =
+        results.length > 0 ? results[results.length - 1].memoryBytes : baselineMemory
       const prevConns = results.length > 0 ? results[results.length - 1].connections : 0
       const deltaMemory = currentMemory - prevMemory
       const deltaConns = activeConns - prevConns
@@ -97,7 +99,7 @@ export async function execute(opts: {
       })
 
       console.log(
-        `    ${activeConns} connected | Memory: ${(currentMemory / 1024 / 1024).toFixed(1)}MB | +${(deltaMemory / 1024).toFixed(1)}KB / +${deltaConns} conns = ${(memPerConn / 1024).toFixed(1)}KB/conn | Rejections: ${rejections}`
+        `    ${activeConns} connected | Memory: ${(currentMemory / 1024 / 1024).toFixed(1)}MB | +${(deltaMemory / 1024).toFixed(1)}KB / +${deltaConns} conns = ${(memPerConn / 1024).toFixed(1)}KB/conn | Rejections: ${rejections}`,
       )
 
       // If we got rejections, we've likely hit a limit - stop ramping
@@ -126,16 +128,15 @@ export async function execute(opts: {
 
   // Find max connections before OOM (if any step failed)
   const lastSuccessful = results.filter((r) => r.allConnected)
-  const maxConnections = lastSuccessful.length > 0
-    ? lastSuccessful[lastSuccessful.length - 1].connections
-    : null
+  const maxConnections =
+    lastSuccessful.length > 0 ? lastSuccessful[lastSuccessful.length - 1].connections : null
 
   console.log('\n--- Summary ---')
   console.log('Conns | Memory    | Delta     | Per Conn  | Rejections')
   console.log('------|-----------|-----------|-----------|----------')
   for (const s of results) {
     console.log(
-      `${String(s.connections).padStart(5)} | ${(s.memoryBytes / 1024 / 1024).toFixed(1).padStart(7)}MB | ${(s.deltaMemoryBytes / 1024).toFixed(1).padStart(7)}KB | ${(s.memoryPerConnectionBytes / 1024).toFixed(1).padStart(7)}KB | ${String(s.rejections).padStart(10)}`
+      `${String(s.connections).padStart(5)} | ${(s.memoryBytes / 1024 / 1024).toFixed(1).padStart(7)}MB | ${(s.deltaMemoryBytes / 1024).toFixed(1).padStart(7)}KB | ${(s.memoryPerConnectionBytes / 1024).toFixed(1).padStart(7)}KB | ${String(s.rejections).padStart(10)}`,
     )
   }
   console.log(`\nBaseline (post-GC): ${(baselineMemory / 1024 / 1024).toFixed(1)}MB`)

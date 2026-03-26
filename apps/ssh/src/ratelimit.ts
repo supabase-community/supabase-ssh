@@ -1,5 +1,5 @@
-import { Redis } from '@upstash/redis'
 import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
 
 /** Checks whether a connection from the given IP should be allowed. */
 export interface RateLimiter {
@@ -22,10 +22,7 @@ export function createRateLimiter(config: RateLimiterConfig): RateLimiter {
 
   const ratelimit = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(
-      config.maxRequests ?? 30,
-      `${config.windowSeconds ?? 60} s`
-    ),
+    limiter: Ratelimit.slidingWindow(config.maxRequests ?? 30, `${config.windowSeconds ?? 60} s`),
     prefix: 'ssh:ratelimit',
   })
 

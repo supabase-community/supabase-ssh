@@ -1,7 +1,8 @@
+import { METRIC_KEYS, scrapeMetrics } from '../metrics-collector.js'
 import { connect, exec } from '../ssh-client.js'
-import { scrapeMetrics, METRIC_KEYS } from '../metrics-collector.js'
 
-export const description = 'Rapid connect/exec/disconnect cycles to find throughput limits and resource leaks'
+export const description =
+  'Rapid connect/exec/disconnect cycles to find throughput limits and resource leaks'
 
 export interface SessionChurnResult {
   steps: Array<{
@@ -69,7 +70,7 @@ export async function execute(opts: {
             failures++
           }
         }
-      })()
+      })(),
     )
 
     // Wait for step duration
@@ -85,7 +86,7 @@ export async function execute(opts: {
     connectTimes.sort((a, b) => a - b)
     commandTimes.sort((a, b) => a - b)
 
-    const p95 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.95)] : 0
+    const p95 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.95)] : 0)
 
     // Check memory
     const snapshot = await scrapeMetrics(opts.metricsUrl)
@@ -102,22 +103,21 @@ export async function execute(opts: {
     })
 
     console.log(
-      `    ${totalCycles} cycles | ${(successRate * 100).toFixed(1)}% success | ${(totalCycles / elapsed).toFixed(1)} cycles/s | connect p95=${p95(connectTimes).toFixed(0)}ms | memory=${(memory / 1024 / 1024).toFixed(1)}MB`
+      `    ${totalCycles} cycles | ${(successRate * 100).toFixed(1)}% success | ${(totalCycles / elapsed).toFixed(1)} cycles/s | connect p95=${p95(connectTimes).toFixed(0)}ms | memory=${(memory / 1024 / 1024).toFixed(1)}MB`,
     )
   }
 
   // Check if memory is stable across steps (no more than 2x growth)
   const memoryValues = results.map((r) => r.memoryBytes).filter((m) => m > 0)
   const memoryStable =
-    memoryValues.length < 2 ||
-    memoryValues[memoryValues.length - 1] < memoryValues[0] * 2
+    memoryValues.length < 2 || memoryValues[memoryValues.length - 1] < memoryValues[0] * 2
 
   console.log('\n--- Summary ---')
   console.log('VUs  | Cycles | Success | Cycles/s | Connect p95 | Cmd p95 | Memory')
   console.log('-----|--------|---------|----------|-------------|---------|-------')
   for (const s of results) {
     console.log(
-      `${String(s.vus).padStart(4)} | ${String(s.totalCycles).padStart(6)} | ${(s.successRate * 100).toFixed(1).padStart(6)}% | ${s.cyclesPerSecond.toFixed(1).padStart(8)} | ${s.connectP95Ms.toFixed(0).padStart(9)}ms | ${s.commandP95Ms.toFixed(0).padStart(5)}ms | ${(s.memoryBytes / 1024 / 1024).toFixed(1).padStart(5)}MB`
+      `${String(s.vus).padStart(4)} | ${String(s.totalCycles).padStart(6)} | ${(s.successRate * 100).toFixed(1).padStart(6)}% | ${s.cyclesPerSecond.toFixed(1).padStart(8)} | ${s.connectP95Ms.toFixed(0).padStart(9)}ms | ${s.commandP95Ms.toFixed(0).padStart(5)}ms | ${(s.memoryBytes / 1024 / 1024).toFixed(1).padStart(5)}MB`,
     )
   }
   console.log(`\nMemory stable: ${memoryStable ? 'yes' : 'NO - possible leak'}`)

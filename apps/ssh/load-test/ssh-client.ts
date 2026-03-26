@@ -84,7 +84,11 @@ export function connect(opts: ConnectionOptions): Promise<ConnectedClient> {
 }
 
 /** Execute a command on a connected client. Returns stdout, stderr, exit code, and timing. */
-export function exec(client: Client, command: string, timeout = 30_000): Promise<{
+export function exec(
+  client: Client,
+  command: string,
+  timeout = 30_000,
+): Promise<{
   stdout: string
   stderr: string
   exitCode: number

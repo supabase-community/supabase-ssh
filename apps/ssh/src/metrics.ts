@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from 'prom-client'
+import { Counter, collectDefaultMetrics, Gauge, Histogram, Registry } from 'prom-client'
 
 const register = new Registry()
 

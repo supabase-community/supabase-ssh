@@ -1,6 +1,6 @@
-import { run, type ScenarioConfig } from '../runner.js'
-import { formatReport, type ReportOptions } from '../report.js'
 import type { SessionProfile } from '../profiles/types.js'
+import { formatReport, type ReportOptions } from '../report.js'
+import { run, type ScenarioConfig } from '../runner.js'
 
 export const description = 'Sustained load at expected operating point'
 
@@ -31,7 +31,7 @@ export async function execute(opts: {
     loop: true,
     onProgress: (stats) => {
       process.stdout.write(
-        `  [${stats.elapsedSeconds}s] VUs=${stats.activeVUs} cmds=${stats.totalCommands} errors=${stats.totalErrors} rejections=${stats.totalRejections}\r`
+        `  [${stats.elapsedSeconds}s] VUs=${stats.activeVUs} cmds=${stats.totalCommands} errors=${stats.totalErrors} rejections=${stats.totalRejections}\r`,
       )
     },
   }
@@ -48,17 +48,15 @@ export async function execute(opts: {
   // Pass/fail
   const totalRejections =
     result.rejections.capacity + result.rejections.rateLimit + result.rejections.concurrency
-  const errorRate =
-    result.totalCommands > 0
-      ? result.serverErrors / result.totalCommands
-      : 0
+  const errorRate = result.totalCommands > 0 ? result.serverErrors / result.totalCommands : 0
 
   const pass = totalRejections === 0 && errorRate < 0.01 && result.commandLatency.p95 < 2000
   console.log(`Result: ${pass ? 'PASS' : 'FAIL'}`)
 
   if (!pass) {
     if (totalRejections > 0) console.log(`  - ${totalRejections} rejections (expected 0)`)
-    if (errorRate >= 0.01) console.log(`  - Error rate ${(errorRate * 100).toFixed(1)}% (expected <1%)`)
+    if (errorRate >= 0.01)
+      console.log(`  - Error rate ${(errorRate * 100).toFixed(1)}% (expected <1%)`)
     if (result.commandLatency.p95 >= 2000)
       console.log(`  - Command p95 ${result.commandLatency.p95.toFixed(0)}ms (expected <2000ms)`)
   }

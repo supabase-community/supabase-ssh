@@ -30,7 +30,7 @@ export async function scrapeHealth(metricsUrl: string): Promise<HealthStatus> {
 /** Compute deltas between two snapshots for counter/gauge metrics */
 export function computeDeltas(
   before: MetricsSnapshot,
-  after: MetricsSnapshot
+  after: MetricsSnapshot,
 ): Record<string, number> {
   const deltas: Record<string, number> = {}
   for (const [key, value] of Object.entries(after.parsed)) {
@@ -86,7 +86,7 @@ export async function queryRange(
   metric: string,
   startUnix: number,
   endUnix: number,
-  step = '5s'
+  step = '5s',
 ): Promise<TimeSeriesPoint[]> {
   const params = new URLSearchParams({
     query: metric,

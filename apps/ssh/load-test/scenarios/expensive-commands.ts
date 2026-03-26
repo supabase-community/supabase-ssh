@@ -1,4 +1,4 @@
-import { run, type ScenarioConfig, type LatencyStats } from '../runner.js'
+import { type LatencyStats, run, type ScenarioConfig } from '../runner.js'
 
 export const description = 'Concurrent heavy greps to find CPU contention ceiling'
 
@@ -20,9 +20,7 @@ const STEP_DURATION_SECONDS = 60
 const EXPENSIVE_PROFILE = {
   name: 'expensive-grep',
   description: 'Heavy recursive grep across all docs',
-  commands: [
-    { command: "grep -r 'authentication' /supabase/docs/", offset: 0 },
-  ],
+  commands: [{ command: "grep -r 'authentication' /supabase/docs/", offset: 0 }],
 }
 
 /**
@@ -67,7 +65,7 @@ export async function execute(opts: {
     })
 
     console.log(
-      `    p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  max=${result.commandLatency.max.toFixed(0)}ms  errors=${result.serverErrors}`
+      `    p50=${result.commandLatency.p50.toFixed(0)}ms  p95=${result.commandLatency.p95.toFixed(0)}ms  max=${result.commandLatency.max.toFixed(0)}ms  errors=${result.serverErrors}`,
     )
   }
 
@@ -81,7 +79,7 @@ export async function execute(opts: {
   for (const s of results) {
     const l = s.commandLatency
     console.log(
-      `${String(s.vus).padStart(4)} | ${l.p50.toFixed(0).padStart(5)}ms ${l.p95.toFixed(0).padStart(5)}ms ${l.p99.toFixed(0).padStart(5)}ms ${l.max.toFixed(0).padStart(5)}ms | ${s.commandsPerSecond.toFixed(1).padStart(6)} | ${String(s.errors).padStart(6)}`
+      `${String(s.vus).padStart(4)} | ${l.p50.toFixed(0).padStart(5)}ms ${l.p95.toFixed(0).padStart(5)}ms ${l.p99.toFixed(0).padStart(5)}ms ${l.max.toFixed(0).padStart(5)}ms | ${s.commandsPerSecond.toFixed(1).padStart(6)} | ${String(s.errors).padStart(6)}`,
     )
   }
 

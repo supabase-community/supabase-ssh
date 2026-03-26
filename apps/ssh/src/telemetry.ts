@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import { SpanKind, trace, diag, DiagConsoleLogger, DiagLogLevel, type Attributes, type Span } from '@opentelemetry/api'
+import {
+  type Attributes,
+  DiagConsoleLogger,
+  DiagLogLevel,
+  diag,
+  type Span,
+  SpanKind,
+  trace,
+} from '@opentelemetry/api'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { BasicTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
@@ -25,12 +33,15 @@ export function initTelemetry(): void {
   const hasOtelEndpoint = !!process.env.OTEL_EXPORTER_OTLP_ENDPOINT
 
   if (process.env.OTEL_LOG_LEVEL) {
-    const level = DiagLogLevel[process.env.OTEL_LOG_LEVEL.toUpperCase() as keyof typeof DiagLogLevel]
+    const level =
+      DiagLogLevel[process.env.OTEL_LOG_LEVEL.toUpperCase() as keyof typeof DiagLogLevel]
     diag.setLogger(new DiagConsoleLogger(), level ?? DiagLogLevel.INFO)
   }
 
   if (!hasLogflare && !hasOtelEndpoint) {
-    console.log('[telemetry] disabled - set LOGFLARE_SOURCE/LOGFLARE_API_KEY or OTEL_EXPORTER_OTLP_ENDPOINT')
+    console.log(
+      '[telemetry] disabled - set LOGFLARE_SOURCE/LOGFLARE_API_KEY or OTEL_EXPORTER_OTLP_ENDPOINT',
+    )
     return
   }
 
@@ -140,11 +151,7 @@ export function shouldObserveFs(command: string): boolean {
 }
 
 /** Attach read file/dir paths to a command span. */
-export function setReadPaths(
-  span: Span,
-  files: string[],
-  dirs: string[]
-): void {
+export function setReadPaths(span: Span, files: string[], dirs: string[]): void {
   if (files.length > 0) span.setAttribute('ssh.command.files_read', files)
   if (dirs.length > 0) span.setAttribute('ssh.command.dirs_read', dirs)
 }
@@ -157,7 +164,7 @@ export function endCommandSpan(
     stdoutBytes: number
     stderrBytes: number
     timedOut: boolean
-  }
+  },
 ): void {
   span.setAttributes({
     'ssh.command.exit_code': result.exitCode,
@@ -198,7 +205,7 @@ export function recordConcurrencyLimited(ctx: SessionContext, concurrentCount: n
 export function recordConnectionRejected(
   ctx: SessionContext,
   activeConnections: number,
-  dropProbability: number
+  dropProbability: number,
 ): void {
   const tracer = trace.getTracer(TRACER_NAME)
   const span = tracer.startSpan('ssh.connection.rejected', {

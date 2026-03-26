@@ -2,11 +2,11 @@ import { generateKeyPairSync } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { Client } from 'ssh2'
-import { createSSHServer } from './ssh.js'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createMetricsServer } from './metrics.js'
 import type { RateLimiter } from './ratelimit.js'
+import { createSSHServer } from './ssh.js'
 
 const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
   type: 'pkcs1',
@@ -61,7 +61,7 @@ function connectClient(): Promise<Client> {
 
 /** Connect and handle auth-phase rejection via USERAUTH_BANNER + disconnect. */
 function connectWithBanner(
-  p: number
+  p: number,
 ): Promise<{ client: Client; rejected: boolean; banner?: string }> {
   return new Promise((resolve) => {
     const client = new Client()
@@ -86,7 +86,7 @@ function connectWithBanner(
 
 function execCommand(
   client: Client,
-  command: string
+  command: string,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve, reject) => {
     client.exec(command, (err, stream) => {
@@ -303,7 +303,12 @@ describe('SSH Server', () => {
       clients.push(client)
       await new Promise<void>((resolve, reject) => {
         client.on('ready', () => resolve()).on('error', reject)
-        client.connect({ host: '127.0.0.1', port: shortPort, username: 'test', password: 'ignored' })
+        client.connect({
+          host: '127.0.0.1',
+          port: shortPort,
+          username: 'test',
+          password: 'ignored',
+        })
       })
 
       const result = await new Promise<{ disconnected: boolean; stdout: string }>((resolve) => {
@@ -344,7 +349,12 @@ describe('SSH Server', () => {
       clients.push(client)
       await new Promise<void>((resolve, reject) => {
         client.on('ready', () => resolve()).on('error', reject)
-        client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+        client.connect({
+          host: '127.0.0.1',
+          port: shutdownPort,
+          username: 'test',
+          password: 'ignored',
+        })
       })
 
       const result = await new Promise<{ stdout: string; code: number | null; elapsed: number }>(
@@ -362,7 +372,7 @@ describe('SSH Server', () => {
             // stream.on('close') may not fire when connection ends abruptly
             const closeStart = Date.now()
             client.on('close', () =>
-              resolve({ stdout, code: exitCode, elapsed: Date.now() - closeStart })
+              resolve({ stdout, code: exitCode, elapsed: Date.now() - closeStart }),
             )
 
             // Give the command a moment to start, then trigger shutdown
@@ -371,7 +381,7 @@ describe('SSH Server', () => {
               shutdownSrv.close('Server is shutting down\n', drainTimeout)
             }, 500)
           })
-        }
+        },
       )
 
       expect(result.stdout).toContain('Server is shutting down')
@@ -396,7 +406,12 @@ describe('SSH Server', () => {
       clients.push(client)
       await new Promise<void>((resolve, reject) => {
         client.on('ready', () => resolve()).on('error', reject)
-        client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+        client.connect({
+          host: '127.0.0.1',
+          port: shutdownPort,
+          username: 'test',
+          password: 'ignored',
+        })
       })
 
       const result = await new Promise<{ stdout: string; code: number; elapsed: number }>(
@@ -409,7 +424,7 @@ describe('SSH Server', () => {
               stdout += data.toString()
             })
             stream.on('close', (code: number) =>
-              resolve({ stdout, code, elapsed: Date.now() - closeStart })
+              resolve({ stdout, code, elapsed: Date.now() - closeStart }),
             )
 
             // Wait for prompt, then trigger shutdown
@@ -423,7 +438,7 @@ describe('SSH Server', () => {
             }
             waitForPrompt()
           })
-        }
+        },
       )
 
       expect(result.stdout).toContain('Server is shutting down')
@@ -448,7 +463,12 @@ describe('SSH Server', () => {
       clients.push(client)
       await new Promise<void>((resolve, reject) => {
         client.on('ready', () => resolve()).on('error', reject)
-        client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+        client.connect({
+          host: '127.0.0.1',
+          port: shutdownPort,
+          username: 'test',
+          password: 'ignored',
+        })
       })
       client.exec('sleep 30', () => {})
 
@@ -462,7 +482,12 @@ describe('SSH Server', () => {
         lateClient.on('ready', () => resolve(false))
         lateClient.on('close', () => resolve(true))
         lateClient.on('error', () => resolve(true))
-        lateClient.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+        lateClient.connect({
+          host: '127.0.0.1',
+          port: shutdownPort,
+          username: 'test',
+          password: 'ignored',
+        })
       })
 
       expect(rejected).toBe(true)
@@ -485,7 +510,12 @@ describe('SSH Server', () => {
       clients.push(client)
       await new Promise<void>((resolve, reject) => {
         client.on('ready', () => resolve()).on('error', reject)
-        client.connect({ host: '127.0.0.1', port: shutdownPort, username: 'test', password: 'ignored' })
+        client.connect({
+          host: '127.0.0.1',
+          port: shutdownPort,
+          username: 'test',
+          password: 'ignored',
+        })
       })
 
       // Run a fast command

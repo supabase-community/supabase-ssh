@@ -67,9 +67,12 @@ function sendAuthBanner(protocol: SSH2Protocol, message: string): void {
   const packet = protocol._packetRW.write.alloc(1 + 4 + textLen + 4)
 
   packet[p] = 53 // SSH_MSG_USERAUTH_BANNER
-  packet.writeUInt32BE(textLen, ++p)
-  packet.write(text, (p += 4), textLen, 'utf8')
-  packet.writeUInt32BE(0, (p += textLen)) // Empty language tag
+  p++
+  packet.writeUInt32BE(textLen, p)
+  p += 4
+  packet.write(text, p, textLen, 'utf8')
+  p += textLen
+  packet.writeUInt32BE(0, p) // Empty language tag
 
   protocol._cipher.encrypt(protocol._packetRW.write.finalize(packet))
 }
@@ -186,7 +189,7 @@ export function createSSHServer(opts: SSHServerOptions) {
         endReason = reason === 'idle timeout' ? 'idle_timeout' : 'max_timeout'
         if (activeChannel) {
           activeChannel.write(
-            `\r\n\r\n${green('Session timed out. Reconnect by running: ssh supabase.sh')}\r\n\r\n`
+            `\r\n\r\n${green('Session timed out. Reconnect by running: ssh supabase.sh')}\r\n\r\n`,
           )
         }
         setTimeout(() => client.end(), 500)
@@ -215,7 +218,7 @@ export function createSSHServer(opts: SSHServerOptions) {
         if (Math.random() >= dropProbability) return false
 
         console.warn(
-          `Rejecting connection: ${activeClients.size} active (soft=${softLimit} hard=${hardLimit} p=${dropProbability.toFixed(2)})`
+          `Rejecting connection: ${activeClients.size} active (soft=${softLimit} hard=${hardLimit} p=${dropProbability.toFixed(2)})`,
         )
         recordConnectionRejected(sessionCtx, activeClients.size, dropProbability)
         incConnectionRejections()
@@ -397,7 +400,7 @@ export function createSSHServer(opts: SSHServerOptions) {
         }
       })
       client.on('error', (err) => console.error('Client error:', err.message))
-    }
+    },
   )
 
   return {

@@ -1,6 +1,6 @@
 /** Parse OTel collector JSONL output into a SessionProfile. */
 import { readFileSync, writeFileSync } from 'node:fs'
-import type { SessionProfile, CommandSpec } from '../profiles/types.js'
+import type { CommandSpec, SessionProfile } from '../profiles/types.js'
 
 interface OTLPSpan {
   name: string
@@ -47,7 +47,7 @@ export function parseProfile(inputPath: string, outputPath: string): SessionProf
   // Filter for ssh.command spans, excluding 'agents' (setup command, not agent behavior)
   const commandSpans = allSpans
     .filter((s) => s.name === 'ssh.command' && getAttr(s, 'ssh.command.text') !== 'agents')
-    .sort((a, b) => BigInt(a.startTimeUnixNano) < BigInt(b.startTimeUnixNano) ? -1 : 1)
+    .sort((a, b) => (BigInt(a.startTimeUnixNano) < BigInt(b.startTimeUnixNano) ? -1 : 1))
 
   if (commandSpans.length === 0) {
     console.warn('No ssh.command spans found in input')
@@ -69,7 +69,7 @@ export function parseProfile(inputPath: string, outputPath: string): SessionProf
     commands,
   }
 
-  writeFileSync(outputPath, JSON.stringify(profile, null, 2) + '\n')
+  writeFileSync(outputPath, `${JSON.stringify(profile, null, 2)}\n`)
   console.log(`\nProfile written to: ${outputPath}`)
   for (const cmd of commands) {
     console.log(`  [${(cmd.offset / 1000).toFixed(1)}s] ${cmd.command.slice(0, 80)}`)
