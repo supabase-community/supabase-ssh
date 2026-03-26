@@ -21,6 +21,7 @@ const SCENARIOS = {
   'session-churn': () => import('./scenarios/session-churn.js'),
   // Autoscale
   'gradual-ramp': () => import('./scenarios/gradual-ramp.js'),
+  'viral-spike': () => import('./scenarios/viral-spike.js'),
   // Tier 3: Validation
   'connection-ramp': () => import('./scenarios/connection-ramp.js'),
   'per-ip-concurrency': () => import('./scenarios/per-ip-concurrency.js'),
@@ -51,6 +52,7 @@ Scenarios:
 
   Autoscale:
     gradual-ramp          Linear ramp simulating real traffic growth
+    viral-spike           Exponential spike simulating viral traffic (HN/Twitter)
 
   Tier 3 - Validation (limits enabled):
     connection-ramp       Soft/hard rejection curve
@@ -206,6 +208,15 @@ async function main() {
           metricsUrl,
           profile,
           targetVUs: vus,
+          holdSeconds: duration,
+        })
+        break
+      case 'viral-spike':
+        await mod.execute({
+          host,
+          port,
+          profile,
+          peakRPS: vus,
           holdSeconds: duration,
         })
         break
