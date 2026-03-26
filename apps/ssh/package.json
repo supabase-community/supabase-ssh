@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.74",
+    "@types/node": "^22",
     "@types/ssh2": "^1.15.4",
     "tsx": "catalog:",
     "typescript": "catalog:",
