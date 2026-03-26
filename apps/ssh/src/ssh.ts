@@ -134,8 +134,8 @@ export interface SSHServerOptions {
    * maxConnectionsPerIp which caps concurrent connections per instance.
    */
   rateLimiter?: RateLimiter
-  /** Command result cache. Defaults to enabled. Pass `false` to disable. */
-  commandCache?: false | CommandCacheOptions
+  /** Command result cache. Defaults to enabled. Pass `false` to disable, or a pre-built instance to share. */
+  commandCache?: false | CommandCacheOptions | CommandCache
 }
 
 /** Creates a testable SSH server. Call listen() to start, close() to stop. */
@@ -155,9 +155,11 @@ export function createSSHServer(opts: SSHServerOptions) {
 
   const activeClients = new Map<ssh2.Connection, { ip: string; channels: Set<ServerChannel> }>()
   const commandCache =
-    opts.commandCache !== false
-      ? new CommandCache(opts.commandCache === undefined ? undefined : opts.commandCache)
-      : null
+    opts.commandCache instanceof CommandCache
+      ? opts.commandCache
+      : opts.commandCache !== false
+        ? new CommandCache(opts.commandCache === undefined ? undefined : opts.commandCache)
+        : null
   let isShuttingDown = false
 
   /** Execute a command via a fresh Bash sandbox and cache the result. */

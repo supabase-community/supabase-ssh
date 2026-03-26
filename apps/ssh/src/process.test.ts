@@ -27,6 +27,7 @@ function spawnServer(): Promise<{ proc: ChildProcess; port: number }> {
         EXEC_TIMEOUT: '5000',
         DRAIN_TIMEOUT: '1000',
         METRICS_PORT: '0',
+        API_PORT: '0',
         DOCS_DIR,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
