@@ -1,0 +1,22 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # v1
+      - run: flyctl deploy ../.. --config "$(pwd)/fly.toml"
+        working-directory: apps/ssh
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP: ${{ vars.FLY_APP }}
