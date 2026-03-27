@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   const modelMessages = await convertToModelMessages(messages)
 
   const result = streamText({
-    model: openai('gpt-5.4-nano'),
+    model: openai('gpt-5.4-mini'),
     system: SYSTEM_PROMPT,
     messages: modelMessages,
     providerOptions: {
@@ -68,7 +68,6 @@ export async function POST(req: Request) {
         }),
         execute: async (input) => {
           const result = await executeBashCommand(input.command)
-          console.log(`Executed command: ${input.command}\nResult: ${JSON.stringify(result)}`)
           return {
             stdout: result.stdout,
             stderr: result.stderr,
