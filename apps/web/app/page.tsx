@@ -1,7 +1,12 @@
+import { Hero } from '../components/hero'
+
 export default function Home() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-      <h1 className="text-2xl text-[#3ecf8e] font-mono">supabase.sh</h1>
+    <main className="min-h-screen bg-[#0a0a0a] font-mono">
+      <Hero />
+
+      {/* Chat widget placeholder */}
+      <div className="max-w-225 mx-auto px-4 pb-20" />
     </main>
-  );
+  )
 }
