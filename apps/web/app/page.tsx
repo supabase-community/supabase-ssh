@@ -8,7 +8,7 @@ export default function Home() {
       <Hero />
 
       {/* Setup section */}
-      <section className="w-full text-center">
+      <section className="w-full text-center px-4">
         <h2 className="text-lg font-mono font-bold text-white mb-6">Setup</h2>
         <SetupSnippet />
       </section>

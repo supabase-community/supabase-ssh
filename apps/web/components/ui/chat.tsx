@@ -34,15 +34,59 @@ export interface ChatPanelProps {
 // --- Sub-components ---
 
 function Header() {
+  const logoColor = '#cccccc'
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="#3ecf8e" paddingX={1}>
-      <Text bold color="#3ecf8e">
-        supabase.sh
-      </Text>
-      <Text dimColor>Browse Supabase docs with bash.</Text>
-      <Text dimColor>
-        Model: <Text color="white">gpt-5.4-nano</Text>
-      </Text>
+    <Box flexDirection="column" borderStyle="round" borderColor="#3ecf8e">
+      <Box flexDirection="row">
+        <Box flexDirection="column" flexShrink={0} flexGrow={0}>
+          <Box flexDirection="column" marginY={1} marginX={4}>
+            <Text color={logoColor}>{' ┌────┐'}</Text>
+            <Text color={logoColor}>{' │    │'}</Text>
+            <Text color={logoColor}>{' │    │'}</Text>
+            <Text color={logoColor}>{'┌─┐  ┌─┐'}</Text>
+            <Text color={logoColor}>{'└─┘  └─┘'}</Text>
+            <Text color={logoColor}>{' │    │'}</Text>
+            <Text color={logoColor}>{' │ │  │ │'}</Text>
+            <Text color={logoColor}>{' │ │  │ │'}</Text>
+            <Text color={logoColor}>{' │ └──┘ │'}</Text>
+            <Text color={logoColor}>{' │      │'}</Text>
+            <Text color={logoColor}>{' └──────┘'}</Text>
+          </Box>
+        </Box>
+        <Box
+          flexDirection="column"
+          flexShrink={1}
+          borderStyle="single"
+          borderLeft
+          borderTop={false}
+          borderRight={false}
+          borderBottom={false}
+          borderColor="#3ecf8e"
+          paddingLeft={2}
+          paddingTop={1}
+          gap={1}
+        >
+          <Text bold color="white" underline>
+            Welcome to Clippy
+          </Text>
+          <Box flexDirection="column">
+            <Text bold color="#3ecf8e">
+              About
+            </Text>
+            <Text color="white" wrap="wrap">
+              This is a dummy agent to demonstrate docs-over-ssh.
+            </Text>
+          </Box>
+          <Box flexDirection="column">
+            <Text bold color="#3ecf8e">
+              Capabilities
+            </Text>
+            <Text dimColor>- Browse and search Supabase docs</Text>
+            <Text dimColor>- Run bash commands</Text>
+            <Text dimColor>- Answer questions about Supabase</Text>
+          </Box>
+        </Box>
+      </Box>
     </Box>
   )
 }
@@ -141,7 +185,7 @@ export function ChatPanel({
   const isInputDisabled = isLoading || !!streamingText
 
   return (
-    <Box flexDirection="column" paddingX={1} gap={1}>
+    <Box flexDirection="column" gap={1}>
       <Header />
 
       {messages.map((msg) => (
