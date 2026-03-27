@@ -97,7 +97,7 @@ export function ChatWidget() {
   }, [chatMessages, renderedStreaming, isLoading, handleSend])
 
   return (
-    <div className="w-full max-w-255 min-w-xl mx-auto p-2 h-full">
+    <div className="w-full max-w-4xl min-w-xl mx-auto p-2 h-full">
       <div className="w-full h-full bg-[#111] border border-[#333] rounded-lg py-4 pl-4">
         <div ref={containerRef} className="w-full h-full" />
       </div>

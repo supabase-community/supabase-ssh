@@ -66,16 +66,16 @@ function Header() {
           paddingTop={1}
           gap={1}
         >
-          <Text bold color="white" underline>
-            Welcome to Clippy
-          </Text>
           <Box flexDirection="column">
-            <Text bold color="#3ecf8e">
-              About
-            </Text>
-            <Text color="white" wrap="wrap">
-              This is a dummy agent to demonstrate docs-over-ssh.
-            </Text>
+            <Box flexDirection="column" gap={1}>
+              <Text color="white" wrap="wrap">
+                This is a dummy terminal agent to demonstrate docs-over-ssh.
+              </Text>
+              <Text color="white" wrap="wrap">
+                Ask Clippy a question about Supabase, and it will use `ssh supabase.sh` to find the
+                answer in the docs.
+              </Text>
+            </Box>
           </Box>
           <Box flexDirection="column">
             <Text bold color="#3ecf8e">
