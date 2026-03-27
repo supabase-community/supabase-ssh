@@ -56,7 +56,7 @@ export function SetupSnippet() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>{' '}
-          to use <code className="text-[#ccc]">ssh supabase.sh &lt;command&gt;</code>:
+          how to use <code className="text-[#ccc]">ssh supabase.sh &lt;command&gt;</code>:
         </p>
       </div>
 

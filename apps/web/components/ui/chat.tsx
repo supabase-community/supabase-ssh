@@ -1,5 +1,6 @@
-import { Box, Text, useInput } from 'ink'
-import { useState } from 'react'
+import { TextInput } from '@inkjs/ui'
+import { Box, Text } from 'ink'
+import { useCallback, useState } from 'react'
 
 // --- Types ---
 
@@ -34,24 +35,31 @@ export interface ChatPanelProps {
 // --- Sub-components ---
 
 function Header() {
-  const logoColor = '#cccccc'
+  const border = '##212121'
+  const green = '#3ecf8e'
+
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="#3ecf8e">
+    <Box flexDirection="column" borderStyle="round" borderColor={border}>
       <Box flexDirection="row">
-        <Box flexDirection="column" flexShrink={0} flexGrow={0}>
-          <Box flexDirection="column" marginY={1} marginX={4}>
-            <Text color={logoColor}>{' ┌────┐'}</Text>
-            <Text color={logoColor}>{' │    │'}</Text>
-            <Text color={logoColor}>{' │    │'}</Text>
-            <Text color={logoColor}>{'┌─┐  ┌─┐'}</Text>
-            <Text color={logoColor}>{'└─┘  └─┘'}</Text>
-            <Text color={logoColor}>{' │    │'}</Text>
-            <Text color={logoColor}>{' │ │  │ │'}</Text>
-            <Text color={logoColor}>{' │ │  │ │'}</Text>
-            <Text color={logoColor}>{' │ └──┘ │'}</Text>
-            <Text color={logoColor}>{' │      │'}</Text>
-            <Text color={logoColor}>{' └──────┘'}</Text>
-          </Box>
+        <Box
+          flexDirection="column"
+          marginY={1}
+          marginX={4}
+          flexShrink={0}
+          flexGrow={0}
+          justifyContent="center"
+        >
+          <Text color={green}>{' ┌────┐'}</Text>
+          <Text color={green}>{' │    │'}</Text>
+          <Text color={green}>{' │    │'}</Text>
+          <Text color={green}>{'┌─┐  ┌─┐'}</Text>
+          <Text color={green}>{'└─┘  └─┘'}</Text>
+          <Text color={green}>{' │    │'}</Text>
+          <Text color={green}>{' │ │  │ │'}</Text>
+          <Text color={green}>{' │ │  │ │'}</Text>
+          <Text color={green}>{' │ └──┘ │'}</Text>
+          <Text color={green}>{' │      │'}</Text>
+          <Text color={green}>{' └──────┘'}</Text>
         </Box>
         <Box
           flexDirection="column"
@@ -61,29 +69,41 @@ function Header() {
           borderTop={false}
           borderRight={false}
           borderBottom={false}
-          borderColor="#3ecf8e"
-          paddingLeft={2}
+          borderColor={border}
           paddingTop={1}
           gap={1}
         >
-          <Box flexDirection="column">
+          <Box flexDirection="column" paddingX={2}>
             <Box flexDirection="column" gap={1}>
               <Text color="white" wrap="wrap">
-                This is a dummy terminal agent to demonstrate docs-over-ssh.
+                <Text color={green}>supabase.sh</Text> exposes Supabase docs over SSH:
               </Text>
+              <Box padding={1} backgroundColor="#212121" flexGrow={0}>
+                <Text color="white" wrap="wrap">
+                  <Text color={green}>$</Text> ssh supabase.sh{' '}
+                  <Text color="#777777">{'<grep/find/cat/etc>'}</Text>
+                </Text>
+              </Box>
               <Text color="white" wrap="wrap">
-                Ask Clippy a question about Supabase, and it will use `ssh supabase.sh` to find the
-                answer in the docs.
+                Try it yourself in a real terminal!
               </Text>
             </Box>
           </Box>
-          <Box flexDirection="column">
-            <Text bold color="#3ecf8e">
-              Capabilities
+          <Box
+            flexDirection="column"
+            paddingX={2}
+            borderStyle="single"
+            borderLeft={false}
+            borderTop
+            borderRight={false}
+            borderBottom={false}
+            borderColor={border}
+            paddingY={1}
+          >
+            <Text color="white" wrap="wrap">
+              Combine it with your favorite AI agent to give it up-to-date docs from Supabase as you
+              develop your app.
             </Text>
-            <Text dimColor>- Browse and search Supabase docs</Text>
-            <Text dimColor>- Run bash commands</Text>
-            <Text dimColor>- Answer questions about Supabase</Text>
           </Box>
         </Box>
       </Box>
@@ -133,29 +153,18 @@ function ChatInput({
   onSubmit: (text: string) => void
   disabled?: boolean
 }) {
-  const [value, setValue] = useState('')
+  const [inputKey, setInputKey] = useState(0)
 
-  useInput((input, key) => {
-    if (disabled) return
-
-    if (key.return) {
+  const handleSubmit = useCallback(
+    (value: string) => {
       const trimmed = value.trim()
       if (trimmed) {
         onSubmit(trimmed)
-        setValue('')
+        setInputKey((k) => k + 1)
       }
-      return
-    }
-
-    if (key.backspace || key.delete) {
-      setValue((prev) => prev.slice(0, -1))
-      return
-    }
-
-    if (!key.ctrl && !key.meta && input) {
-      setValue((prev) => prev + input)
-    }
-  })
+    },
+    [onSubmit],
+  )
 
   return (
     <Box
@@ -166,10 +175,12 @@ function ChatInput({
       borderColor="gray"
     >
       <Text color="#3ecf8e">❯ </Text>
-      <Text color="white">
-        {value}
-        {!disabled && <Text inverse> </Text>}
-      </Text>
+      <TextInput
+        key={inputKey}
+        isDisabled={disabled}
+        onSubmit={handleSubmit}
+        placeholder="Ask Clippy about Supabase..."
+      />
     </Box>
   )
 }

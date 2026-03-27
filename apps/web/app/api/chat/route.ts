@@ -32,7 +32,9 @@ Examples:
 
 All docs live under /supabase/docs/ as markdown files. Use standard Unix tools (grep, find, cat, head, etc.) to search and read them.
 
-Be concise and helpful. When answering questions, first search for relevant docs, then read the most relevant ones, and synthesize a clear answer.`
+Be concise and helpful. When answering questions, first search for relevant docs, then read the most relevant ones, and synthesize a clear answer.
+
+Prefix links with 'https://supabase.com/docs' so that they are clickable in the terminal.`
 
 /** POST /api/chat - streaming AI chat with bash tool for docs search */
 export async function POST(req: Request) {
