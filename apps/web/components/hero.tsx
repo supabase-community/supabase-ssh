@@ -1,4 +1,3 @@
-import { CodeBlock } from './code-block'
 import { SetupSnippet } from './setup-snippet'
 
 /** Hero section for the supabase.sh landing page. */
@@ -23,17 +22,6 @@ export function Hero() {
           using bash. Designed for agents.
         </p>
       </section>
-
-      {/* Example usage */}
-      <div className="w-full max-w-xl mb-16">
-        <CodeBlock copyText="ssh supabase.sh">
-          <span className="text-[#888]">
-            <span className="text-[#3ecf8e]">$ </span>
-            <span className="text-[#ccc]">ssh supabase.sh </span>
-            {'<grep/find/cat/etc>'}
-          </span>
-        </CodeBlock>
-      </div>
 
       {/* Setup section */}
       <section className="w-full text-center">

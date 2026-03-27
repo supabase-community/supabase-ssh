@@ -27,7 +27,7 @@ export function CodeBlock({ copyText, children }: CodeBlockProps) {
     >
       {children}
       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-[#888] group-hover:text-[#3ecf8e] transition-colors">
-        {copied ? 'copied!' : 'click to copy'}
+        {copied ? 'copied!' : 'copy'}
       </span>
     </button>
   )

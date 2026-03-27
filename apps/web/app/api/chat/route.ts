@@ -1,17 +1,22 @@
 import { openai } from '@ai-sdk/openai'
-import { Ratelimit } from '@upstash/ratelimit'
-import { kv } from '@vercel/kv'
-import { stepCountIs, streamText, tool } from 'ai'
+import { convertToModelMessages, stepCountIs, streamText, tool } from 'ai'
 import { z } from 'zod'
 import { executeBashCommand } from '@/lib/bash-tool'
 
 export const maxDuration = 30
 
-const tokenRateLimit = new Ratelimit({
-  redis: kv,
-  limiter: Ratelimit.fixedWindow(50_000, '30m'),
-  prefix: 'ratelimit:chat:tokens',
-})
+const hasKv = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+
+async function getRateLimit() {
+  if (!hasKv) return null
+  const { Ratelimit } = await import('@upstash/ratelimit')
+  const { kv } = await import('@vercel/kv')
+  return new Ratelimit({
+    redis: kv,
+    limiter: Ratelimit.fixedWindow(50_000, '30m'),
+    prefix: 'ratelimit:chat:tokens',
+  })
+}
 
 const SYSTEM_PROMPT = `You are a Supabase documentation assistant. You help users find and understand Supabase docs.
 
@@ -36,17 +41,24 @@ export async function POST(req: Request) {
     req.headers.get('x-real-ip') ??
     'unknown'
 
-  const { remaining } = await tokenRateLimit.getRemaining(ip)
-  if (remaining <= 0) {
-    return new Response('Rate limited', { status: 429 })
+  const rateLimit = await getRateLimit()
+  if (rateLimit) {
+    const { remaining } = await rateLimit.getRemaining(ip)
+    if (remaining <= 0) {
+      return new Response('Rate limited', { status: 429 })
+    }
   }
 
   const { messages } = await req.json()
+  const modelMessages = await convertToModelMessages(messages)
 
   const result = streamText({
     model: openai('gpt-5.4-nano'),
     system: SYSTEM_PROMPT,
-    messages,
+    messages: modelMessages,
+    providerOptions: {
+      openai: { store: false },
+    },
     stopWhen: stepCountIs(10),
     tools: {
       bash: tool({
@@ -56,6 +68,7 @@ export async function POST(req: Request) {
         }),
         execute: async (input) => {
           const result = await executeBashCommand(input.command)
+          console.log(`Executed command: ${input.command}\nResult: ${JSON.stringify(result)}`)
           return {
             stdout: result.stdout,
             stderr: result.stderr,
@@ -65,9 +78,12 @@ export async function POST(req: Request) {
       }),
     },
     onFinish: async ({ usage }) => {
-      await tokenRateLimit.limit(ip, {
-        rate: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-      })
+      const rl = await getRateLimit()
+      if (rl) {
+        await rl.limit(ip, {
+          rate: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+        })
+      }
     },
   })
 
