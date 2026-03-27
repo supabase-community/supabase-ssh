@@ -1,108 +1,163 @@
 'use client'
 
+import type { UIMessage } from '@ai-sdk/react'
 import { useChat } from '@ai-sdk/react'
-import { InkTerminalBox } from 'ink-web'
-import 'ink-web/css'
 import '@xterm/xterm/css/xterm.css'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { mountInk } from '../lib/ink-xterm'
 import { ChatTerminal } from './chat-terminal'
+import type { ChatMessage } from './ui/chat'
 
-/** Below-fold chat widget. Renders an xterm.js terminal with an AI chat panel inside. */
+/** Below-fold chat widget. Uses mountInkInXterm directly for full control over sizing. */
 export function ChatWidget() {
   const { messages, sendMessage, status } = useChat()
-
   const isLoading = status === 'streaming' || status === 'submitted'
 
-  // Transform AI SDK UIMessages into the shape ChatPanel expects
-  const chatMessages: Array<{
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    toolCalls: Array<{
-      id: string
-      title: string
-      status: 'pending' | 'in_progress' | 'completed' | 'failed'
-      result?: string
-    }>
-  }> = []
+  const { messages: chatMessages, streamingText: rawStreaming } = useMemo(
+    () => transformMessages(messages),
+    [messages],
+  )
 
+  // Debounce streaming text updates to 1s - xterm.js can't keep up with per-token rerenders
+  const [renderedStreaming, setRenderedStreaming] = useState('')
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestStreamingRef = useRef(rawStreaming)
+  latestStreamingRef.current = rawStreaming
+
+  useEffect(() => {
+    if (!rawStreaming) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      setRenderedStreaming('')
+      return
+    }
+
+    if (!timerRef.current) {
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        setRenderedStreaming(latestStreamingRef.current)
+      }, 1000)
+    }
+  }, [rawStreaming])
+
+  const handleSend = useCallback((text: string) => sendMessage({ text }), [sendMessage])
+
+  // Mount Ink into xterm.js directly
+  const containerRef = useRef<HTMLDivElement>(null)
+  const rerenderRef = useRef<((el: React.ReactElement) => void) | null>(null)
+  const unmountRef = useRef<(() => void) | null>(null)
+  const mountedRef = useRef(false)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || mountedRef.current) return
+    if (el.clientWidth === 0 || el.clientHeight === 0) return
+    mountedRef.current = true
+    let cancelled = false
+
+    mountInk(
+      <ChatTerminal messages={[]} streamingText="" isLoading={false} onSendMessage={handleSend} />,
+      {
+        container: el,
+        focus: false,
+        termOptions: { fontSize: 14 },
+      },
+    ).then(({ rerender, unmount }) => {
+      if (cancelled) {
+        unmount()
+        return
+      }
+      rerenderRef.current = rerender
+      unmountRef.current = unmount
+    })
+
+    return () => {
+      cancelled = true
+      mountedRef.current = false
+      rerenderRef.current = null
+      unmountRef.current?.()
+    }
+  }, [handleSend])
+
+  // Re-render Ink when props change
+  useEffect(() => {
+    rerenderRef.current?.(
+      <ChatTerminal
+        messages={chatMessages}
+        streamingText={renderedStreaming}
+        isLoading={isLoading}
+        onSendMessage={handleSend}
+      />,
+    )
+  }, [chatMessages, renderedStreaming, isLoading, handleSend])
+
+  return (
+    <div className="w-full max-w-255 mx-auto p-2 h-full">
+      <div ref={containerRef} className="w-full h-full" />
+    </div>
+  )
+}
+
+/** Display name and which input field to show as the arg. */
+const toolDisplay: Record<string, { name: string; argKey: string }> = {
+  bash: { name: 'Bash', argKey: 'command' },
+}
+
+function formatToolTitle(toolName: string, input?: Record<string, unknown>): string {
+  const display = toolDisplay[toolName]
+  const name = display?.name ?? toolName
+  const arg = display ? (input?.[display.argKey] as string) : undefined
+  return arg ? `${name}(${arg})` : name
+}
+
+function transformMessages(messages: UIMessage[]): {
+  messages: ChatMessage[]
+  streamingText: string
+} {
+  const result: ChatMessage[] = []
   let streamingText = ''
 
   for (const msg of messages) {
     if (msg.role !== 'user' && msg.role !== 'assistant') continue
 
-    const textParts: string[] = []
-    const toolCalls: Array<{
-      id: string
-      title: string
-      status: 'pending' | 'in_progress' | 'completed' | 'failed'
-      result?: string
-    }> = []
+    const parts: ChatMessage['parts'] = []
+    let textIdx = 0
 
     for (const part of msg.parts) {
       if (part.type === 'text') {
         if (part.state === 'streaming') {
           streamingText = part.text
-        } else {
-          textParts.push(part.text)
+        } else if (part.text) {
+          parts.push({ type: 'text', id: `${msg.id}-t${textIdx++}`, text: part.text })
         }
       } else if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
         const toolPart = part as {
           toolCallId: string
           state: string
-          input?: { command?: string }
-          output?: { stdout?: string }
+          input?: Record<string, unknown>
         } & ({ type: 'dynamic-tool'; toolName: string } | { type: string })
         const toolName =
           'toolName' in toolPart ? toolPart.toolName : toolPart.type.replace('tool-', '')
-        const command = toolPart.input?.command ?? toolName
-        toolCalls.push({
+        parts.push({
+          type: 'tool',
           id: toolPart.toolCallId,
-          title: `$ ${command}`,
+          title: formatToolTitle(toolName, toolPart.input),
           status:
             toolPart.state === 'output-available'
               ? 'completed'
               : toolPart.state === 'output-error'
                 ? 'failed'
                 : 'in_progress',
-          result:
-            toolPart.state === 'output-available'
-              ? (toolPart.output?.stdout ?? undefined)
-              : undefined,
         })
       }
     }
 
-    const content = textParts.join('')
-    if (content || toolCalls.length > 0) {
-      chatMessages.push({
-        id: msg.id,
-        role: msg.role,
-        content,
-        toolCalls,
-      })
+    if (parts.length > 0) {
+      result.push({ id: msg.id, role: msg.role as 'user' | 'assistant', parts })
     }
   }
 
-  // Active tool calls are from the last assistant message if still streaming
-  const lastMsg = chatMessages[chatMessages.length - 1]
-  const activeToolCalls =
-    isLoading && lastMsg?.role === 'assistant'
-      ? lastMsg.toolCalls.filter((tc) => tc.status === 'in_progress')
-      : []
-
-  return (
-    <div className="w-full max-w-255 mx-auto">
-      <InkTerminalBox rows={20} focus={false} loading={false} padding={8}>
-        <ChatTerminal
-          messages={chatMessages}
-          streamingText={streamingText}
-          isLoading={isLoading}
-          activeToolCalls={activeToolCalls}
-          onSendMessage={(text) => {
-            sendMessage({ text })
-          }}
-        />
-      </InkTerminalBox>
-    </div>
-  )
+  return { messages: result, streamingText }
 }
