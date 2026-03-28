@@ -7,6 +7,9 @@
     "dev": "pnpm --filter supabase-ssh run dev",
     "test": "pnpm --filter supabase-ssh run test",
     "start": "pnpm --filter supabase-ssh run start",
+    "dev:web": "pnpm --filter supabase-ssh-web run dev",
+    "build:web": "pnpm --filter supabase-ssh-web run build",
+    "test:web": "pnpm --filter supabase-ssh-web run test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write ."

@@ -104,11 +104,11 @@ Pick the path that matches the user's tool. \`.agents/skills/\` is a cross-clien
 | Tool | Skill path |
 |------|-----------|
 | Claude Code | \`.claude/skills/supabase-docs/SKILL.md\` |
-| GitHub Copilot | \`.github/skills/supabase-docs/SKILL.md\` |
 | Codex | \`.agents/skills/supabase-docs/SKILL.md\` |
-| Gemini CLI | \`.gemini/skills/supabase-docs/SKILL.md\` or \`.agents/skills/supabase-docs/SKILL.md\` |
 | Cursor | \`.cursor/skills/supabase-docs/SKILL.md\` or \`.agents/skills/supabase-docs/SKILL.md\` |
 | OpenCode | \`.opencode/skills/supabase-docs/SKILL.md\` or \`.agents/skills/supabase-docs/SKILL.md\` |
+| Gemini CLI | \`.gemini/skills/supabase-docs/SKILL.md\` or \`.agents/skills/supabase-docs/SKILL.md\` |
+| GitHub Copilot | \`.github/skills/supabase-docs/SKILL.md\` |
 | Other | \`.agents/skills/supabase-docs/SKILL.md\` |
 
 \`\`\`bash

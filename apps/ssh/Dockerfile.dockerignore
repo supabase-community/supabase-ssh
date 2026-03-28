@@ -9,5 +9,8 @@
 # This package
 !apps/ssh/
 
+# Web app (static export built in Docker)
+!apps/web/
+
 # Pre-built docs markdown
 !apps/ssh/docs/

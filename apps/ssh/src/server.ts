@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 
 import { serve } from '@hono/node-server'
 
+import { createApiServer } from './api.js'
+import { CommandCache } from './command-cache.js'
 import { createMetricsServer } from './metrics.js'
 import { createRateLimiter } from './ratelimit.js'
 import { createSSHServer } from './ssh.js'
@@ -11,12 +13,14 @@ import { initTelemetry, shutdownTelemetry } from './telemetry.js'
 
 const PORT = parseInt(process.env.PORT ?? '22', 10)
 const METRICS_PORT = parseInt(process.env.METRICS_PORT ?? '9091', 10)
+const API_PORT = parseInt(process.env.API_PORT ?? '8080', 10)
 const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT ?? '60000', 10)
 const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT ?? '600000', 10)
 const EXEC_TIMEOUT = parseInt(process.env.EXEC_TIMEOUT ?? '10000', 10)
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? '100', 10)
 const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP ?? '10', 10)
 const DRAIN_TIMEOUT = parseInt(process.env.DRAIN_TIMEOUT ?? '15000', 10)
+const WEB_ORIGIN = process.env.WEB_ORIGIN ?? '*'
 
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL
 const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
@@ -29,6 +33,8 @@ const COMMAND_CACHE_MAX_OUTPUT_BYTES = parseInt(
   process.env.COMMAND_CACHE_MAX_OUTPUT_BYTES ?? String(512 * 1024),
   10,
 )
+
+const WEB_DIR = process.env.WEB_DIR
 
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
@@ -68,6 +74,13 @@ async function main() {
     console.log('Rate limiting disabled (no UPSTASH_REDIS_REST_URL configured)')
   }
 
+  const commandCache = COMMAND_CACHE
+    ? new CommandCache({
+        maxEntries: COMMAND_CACHE_MAX_ENTRIES,
+        maxOutputBytes: COMMAND_CACHE_MAX_OUTPUT_BYTES,
+      })
+    : null
+
   const srv = createSSHServer({
     hostKey,
     port: PORT,
@@ -78,9 +91,7 @@ async function main() {
     hardLimit: MAX_CONNECTIONS,
     maxConnectionsPerIp: MAX_CONNECTIONS_PER_IP,
     rateLimiter,
-    commandCache: COMMAND_CACHE
-      ? { maxEntries: COMMAND_CACHE_MAX_ENTRIES, maxOutputBytes: COMMAND_CACHE_MAX_OUTPUT_BYTES }
-      : false,
+    commandCache: commandCache ?? false,
   })
 
   await srv.listen()
@@ -93,6 +104,21 @@ async function main() {
     console.log(`HTTP server listening on port ${info.port} (/metrics, /healthz)`)
   })
 
+  const apiApp = createApiServer({
+    execTimeout: EXEC_TIMEOUT,
+    commandCache,
+    rateLimiter,
+    allowedOrigin: WEB_ORIGIN,
+    webDir: WEB_DIR,
+  })
+
+  const apiServer = serve({ fetch: apiApp.fetch, port: API_PORT }, (info) => {
+    console.log(`API server listening on port ${info.port} (/api/exec)`)
+    if (WEB_DIR) {
+      console.log(`Serving static files from ${WEB_DIR}`)
+    }
+  })
+
   async function gracefulShutdown(signal: string) {
     console.log(`${signal} received`)
     await Promise.all([
@@ -101,6 +127,7 @@ async function main() {
         DRAIN_TIMEOUT,
       ),
       new Promise<void>((resolve) => httpServer.close(() => resolve())),
+      new Promise<void>((resolve) => apiServer.close(() => resolve())),
       shutdownTelemetry(),
     ])
     process.exit(0)
