@@ -16,14 +16,18 @@ export default function Home() {
         &copy;{' '}
         <a
           href="https://supabase.com"
-          target="_blank" rel="noopener noreferrer" className="text-[#888] hover:text-[#3ecf8e] transition-colors"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#888] hover:text-[#3ecf8e] transition-colors"
         >
           Supabase
         </a>{' '}
         {new Date().getFullYear()} |{' '}
         <a
           href="https://github.com/supabase-community/supabase-ssh"
-          target="_blank" rel="noopener noreferrer" className="text-[#888] hover:text-[#3ecf8e] transition-colors"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#888] hover:text-[#3ecf8e] transition-colors"
         >
           GitHub
         </a>

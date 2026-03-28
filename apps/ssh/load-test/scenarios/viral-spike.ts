@@ -44,7 +44,7 @@ function buildArrivalSchedule(opts: {
 
   // Rise phase - exponential growth
   for (let t = 0; t < riseSeconds; t++) {
-    const rate = peakRPS * (Math.exp((k * t) / riseSeconds) - 1) / (Math.exp(k) - 1)
+    const rate = (peakRPS * (Math.exp((k * t) / riseSeconds) - 1)) / (Math.exp(k) - 1)
     schedule.push(Math.max(1, Math.round(rate)))
   }
 
@@ -170,7 +170,13 @@ export async function execute(opts: {
   const decaySeconds = opts.decaySeconds ?? 180
   const steepness = opts.steepness ?? 3
 
-  const schedule = buildArrivalSchedule({ peakRPS, riseSeconds, holdSeconds, decaySeconds, steepness })
+  const schedule = buildArrivalSchedule({
+    peakRPS,
+    riseSeconds,
+    holdSeconds,
+    decaySeconds,
+    steepness,
+  })
   const totalSessions = schedule.reduce((a, b) => a + b, 0)
   const totalSeconds = schedule.length
 

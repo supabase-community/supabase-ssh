@@ -45,7 +45,8 @@ export class CommandCache {
 
   set(cwd: string, command: string, result: BashExecResult): void {
     const key = CommandCache.#key(cwd, command)
-    const outputBytes = Buffer.byteLength(result.stdout ?? '') + Buffer.byteLength(result.stderr ?? '')
+    const outputBytes =
+      Buffer.byteLength(result.stdout ?? '') + Buffer.byteLength(result.stderr ?? '')
     if (outputBytes > this.#maxOutputBytes) return
 
     // Evict oldest if at capacity
