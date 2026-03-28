@@ -8,7 +8,9 @@ primary_region = "iad"
 # First-time setup (repeat for each app/env):
 #   fly apps create <app> --org <org>   (org only needed at creation)
 #   fly ips allocate-v4 --app <app>     (port 22 needs a dedicated IPv4)
+#   fly ips allocate-v6 --app <app>
 #   fly secrets set SSH_HOST_KEY="$(pnpm run --silent generate:host-key)" --app <app>
+#   fly certs add <domain> --app <app>  (provisions TLS cert for HTTPS)
 #
 #   The host key is the only durable state. fly secrets list won't show the
 #   value, but you can always recover it while a machine is running:
@@ -65,6 +67,11 @@ internal_port = 8080
 auto_stop_machines = true
 auto_start_machines = true
 min_machines_running = 1
+
+[[services.ports]]
+port = 80
+handlers = ["http"]
+force_https = true
 
 [[services.ports]]
 port = 443

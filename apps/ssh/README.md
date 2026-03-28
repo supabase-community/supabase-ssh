@@ -61,9 +61,13 @@ Port 22 requires a dedicated IPv4 per app (~$2/mo). Repeat these steps for each 
 ```bash
 fly apps create <app> --org <org>
 fly ips allocate-v4 --app <app>
+fly ips allocate-v6 --app <app>
 
 # Generate a key and set it as a Fly secret in one step:
 fly secrets set SSH_HOST_KEY="$(pnpm run --silent generate:host-key)" --app <app>
+
+# Provision TLS cert for HTTPS (required for the landing page):
+fly certs add <domain> --app <app>
 ```
 
 The host key is the only durable state. You can recover it from a running machine:
