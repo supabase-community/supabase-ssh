@@ -38,6 +38,10 @@ Prefix links with 'https://supabase.com/docs' so that they are clickable in the 
 
 /** POST /api/chat - streaming AI chat with bash tool for docs search */
 export async function POST(req: Request) {
+  if (!process.env.ENABLE_CHAT) {
+    return new Response('Not found', { status: 404 })
+  }
+
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     req.headers.get('x-real-ip') ??
