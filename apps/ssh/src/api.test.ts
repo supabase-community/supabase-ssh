@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createApiServer } from './api.js'
 import { CommandCache } from './command-cache.js'
 import type { RateLimiter } from './ratelimit.js'
-import { createApiServer } from './api.js'
 
 const docsDir = mkdtempSync(join(tmpdir(), 'api-test-docs-'))
 
@@ -121,7 +121,7 @@ describe('command cache', () => {
   it('uses cache when provided', async () => {
     const cache = new CommandCache()
     const cwd = '/supabase'
-    cache.set(cwd, 'echo cached', { stdout: 'from-cache\n', stderr: '', exitCode: 0 })
+    cache.set(cwd, 'echo cached', { stdout: 'from-cache\n', stderr: '', exitCode: 0, env: {} })
 
     const cachedApp = createApiServer({
       execTimeout: 5000,
