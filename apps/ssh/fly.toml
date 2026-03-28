@@ -8,6 +8,7 @@ primary_region = "iad"
 # First-time setup (repeat for each app/env):
 #   fly apps create <app> --org <org>   (org only needed at creation)
 #   fly ips allocate-v4 --app <app>     (port 22 needs a dedicated IPv4)
+#   fly ips allocate-v6 --app <app>
 #   fly secrets set SSH_HOST_KEY="$(pnpm run --silent generate:host-key)" --app <app>
 #   fly certs add <domain> --app <app>  (provisions TLS cert for HTTPS)
 #
