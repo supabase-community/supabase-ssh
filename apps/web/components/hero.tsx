@@ -13,6 +13,8 @@ export function Hero() {
           Browse{' '}
           <a
             href="https://supabase.com/docs"
+            rel="noopener noreferrer"
+            target="_blank"
             className="text-[#ccc] hover:text-[#3ecf8e] transition-colors underline underline-offset-2 decoration-[#555] hover:decoration-[#3ecf8e]"
           >
             Supabase docs
