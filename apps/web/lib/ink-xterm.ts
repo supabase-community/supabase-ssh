@@ -4,9 +4,11 @@
  */
 
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Terminal } from '@xterm/xterm'
 import { render } from 'ink'
 import type { ReactNode } from 'react'
+import { setMarkdownWidth } from '../components/ui/chat'
 
 // Minimal EventEmitter for stream shims (Ink expects Node-like streams)
 class EventEmitter {
@@ -190,7 +192,13 @@ export async function mountInk(element: ReactNode, opts: MountOptions): Promise<
   // FitAddon measures actual char width and sets correct cols/rows before first render
   const fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
+  term.loadAddon(
+    new WebLinksAddon((_event, uri) => {
+      window.open(uri, '_blank', 'noopener')
+    }),
+  )
   fitAddon.fit()
+  setMarkdownWidth(term.cols)
 
   // Hide cursor (Ink draws its own)
   term.write('\x1b[?25l')
@@ -213,6 +221,7 @@ export async function mountInk(element: ReactNode, opts: MountOptions): Promise<
     stdin.columns = term.cols
     stdin.rows = term.rows
     stdout.emit('resize')
+    setMarkdownWidth(term.cols)
   }
 
   // Yoga WASM must be ready before Ink can render

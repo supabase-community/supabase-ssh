@@ -1,6 +1,54 @@
 import { TextInput } from '@inkjs/ui'
+import chalk from 'chalk'
 import { Box, Text } from 'ink'
-import { useCallback, useState } from 'react'
+import { Marked } from 'marked'
+import { markedTerminal } from 'marked-terminal'
+import { useCallback, useMemo, useState } from 'react'
+
+const BRAND_GREEN = '#3ecf8e'
+const greenChalk = chalk.hex(BRAND_GREEN)
+
+/** Create a Marked instance configured for terminal rendering at the given width. */
+function createMarked(width: number) {
+  return new Marked(
+    markedTerminal({
+      reflowText: true,
+      width,
+      link: greenChalk,
+      href: greenChalk.underline,
+    }),
+    {
+      // marked-terminal doesn't process inline tokens for tight list items (text nodes).
+      // This extension walks the token tree and converts text nodes with inline children to paragraphs.
+      walkTokens(token) {
+        if (token.type === 'text' && token.tokens && token.tokens.length > 0) {
+          ;(token as Record<string, unknown>).type = 'paragraph'
+        }
+      },
+      renderer: {
+        // Strip HTML tags from output - markdown is rendered to a terminal, not a DOM
+        html: () => '',
+      },
+    },
+  )
+}
+
+let markedInstance = createMarked(80)
+
+/** Rebuild the marked instance when terminal width changes. */
+export function setMarkdownWidth(width: number) {
+  markedInstance = createMarked(width)
+}
+
+/** Render markdown to ANSI-styled text for terminal display. */
+function renderMarkdown(text: string): string {
+  const result = markedInstance.parse(text)
+  if (typeof result !== 'string') {
+    console.warn('marked.parse returned a Promise unexpectedly')
+    return ''
+  }
+  return result.trimEnd()
+}
 
 // --- Types ---
 
@@ -36,7 +84,6 @@ export interface ChatPanelProps {
 
 function Header() {
   const border = '##212121'
-  const green = '#3ecf8e'
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={border}>
@@ -49,17 +96,17 @@ function Header() {
           flexGrow={0}
           justifyContent="center"
         >
-          <Text color={green}>{' ┌────┐'}</Text>
-          <Text color={green}>{' │    │'}</Text>
-          <Text color={green}>{' │    │'}</Text>
-          <Text color={green}>{'┌─┐  ┌─┐'}</Text>
-          <Text color={green}>{'└─┘  └─┘'}</Text>
-          <Text color={green}>{' │    │'}</Text>
-          <Text color={green}>{' │ │  │ │'}</Text>
-          <Text color={green}>{' │ │  │ │'}</Text>
-          <Text color={green}>{' │ └──┘ │'}</Text>
-          <Text color={green}>{' │      │'}</Text>
-          <Text color={green}>{' └──────┘'}</Text>
+          <Text color={BRAND_GREEN}>{' ┌────┐'}</Text>
+          <Text color={BRAND_GREEN}>{' │    │'}</Text>
+          <Text color={BRAND_GREEN}>{' │    │'}</Text>
+          <Text color={BRAND_GREEN}>{'┌─┐  ┌─┐'}</Text>
+          <Text color={BRAND_GREEN}>{'└─┘  └─┘'}</Text>
+          <Text color={BRAND_GREEN}>{' │    │'}</Text>
+          <Text color={BRAND_GREEN}>{' │ │  │ │'}</Text>
+          <Text color={BRAND_GREEN}>{' │ │  │ │'}</Text>
+          <Text color={BRAND_GREEN}>{' │ └──┘ │'}</Text>
+          <Text color={BRAND_GREEN}>{' │      │'}</Text>
+          <Text color={BRAND_GREEN}>{' └──────┘'}</Text>
         </Box>
         <Box
           flexDirection="column"
@@ -76,11 +123,11 @@ function Header() {
           <Box flexDirection="column" paddingX={2}>
             <Box flexDirection="column" gap={1}>
               <Text color="white" wrap="wrap">
-                <Text color={green}>supabase.sh</Text> exposes Supabase docs over SSH:
+                <Text color={BRAND_GREEN}>supabase.sh</Text> serves Supabase docs over SSH:
               </Text>
               <Box padding={1} backgroundColor="#212121" flexGrow={0}>
                 <Text color="white" wrap="wrap">
-                  <Text color={green}>$</Text> ssh supabase.sh{' '}
+                  <Text color={BRAND_GREEN}>$</Text> ssh supabase.sh{' '}
                   <Text color="#777777">{'<grep/find/cat/etc>'}</Text>
                 </Text>
               </Box>
@@ -116,7 +163,7 @@ function UserMessage({ text }: { text: string }) {
     <Box width="100%">
       <Box backgroundColor="#1a1a2e" width="100%" paddingRight={1}>
         <Text color="white" wrap="wrap">
-          <Text color="#3ecf8e">❯ </Text>
+          <Text color={BRAND_GREEN}>❯ </Text>
           {text}
         </Text>
       </Box>
@@ -125,13 +172,12 @@ function UserMessage({ text }: { text: string }) {
 }
 
 function AssistantText({ text }: { text: string }) {
+  const rendered = useMemo(() => renderMarkdown(text), [text])
   return (
     <Box flexDirection="row">
-      <Text color="#3ecf8e">⏺ </Text>
+      <Text color={BRAND_GREEN}>⏺ </Text>
       <Box flexShrink={1}>
-        <Text wrap="wrap" color="white">
-          {text}
-        </Text>
+        <Text wrap="wrap">{rendered}</Text>
       </Box>
     </Box>
   )
@@ -140,7 +186,7 @@ function AssistantText({ text }: { text: string }) {
 function ToolCallCard({ title }: { title: string }) {
   return (
     <Box>
-      <Text color="#3ecf8e">⏺ </Text>
+      <Text color={BRAND_GREEN}>⏺ </Text>
       <Text dimColor>{title}</Text>
     </Box>
   )
@@ -174,7 +220,7 @@ function ChatInput({
       borderRight={false}
       borderColor="gray"
     >
-      <Text color="#3ecf8e">❯ </Text>
+      <Text color={BRAND_GREEN}>❯ </Text>
       <TextInput
         key={inputKey}
         isDisabled={disabled}
@@ -217,7 +263,7 @@ export function ChatPanel({
 
       {streamingText && (
         <Box flexDirection="row">
-          <Text color="#3ecf8e">⏺ </Text>
+          <Text color={BRAND_GREEN}>⏺ </Text>
           <Box flexShrink={1}>
             <Text wrap="wrap" color="white">
               {streamingText}
