@@ -1,6 +1,7 @@
-import { cors } from 'hono/cors'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
-import { CommandCache } from './command-cache.js'
+import { cors } from 'hono/cors'
+import type { CommandCache } from './command-cache.js'
 import type { RateLimiter } from './ratelimit.js'
 import { createBash } from './shell/bash.js'
 
@@ -10,6 +11,7 @@ export interface ApiServerOptions {
   rateLimiter?: RateLimiter
   allowedOrigin?: string
   docsDir?: string
+  webDir?: string
 }
 
 /** Creates a public-facing HTTP API server with CORS and /api/exec endpoint. */
@@ -20,6 +22,7 @@ export function createApiServer(opts: ApiServerOptions = {}) {
     rateLimiter,
     allowedOrigin = '*',
     docsDir,
+    webDir,
   } = opts
 
   const app = new Hono()
@@ -82,7 +85,11 @@ export function createApiServer(opts: ApiServerOptions = {}) {
     // Check cache
     const cached = commandCache?.get(cwd, command)
     if (cached) {
-      return c.json({ stdout: cached.stdout ?? '', stderr: cached.stderr ?? '', exitCode: cached.exitCode })
+      return c.json({
+        stdout: cached.stdout ?? '',
+        stderr: cached.stderr ?? '',
+        exitCode: cached.exitCode,
+      })
     }
 
     // Execute command
@@ -103,6 +110,26 @@ export function createApiServer(opts: ApiServerOptions = {}) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
     }
   })
+
+  if (webDir) {
+    app.use('/_next/static/*', (c, next) => {
+      c.header('Cache-Control', 'public, max-age=31536000, immutable')
+      return next()
+    })
+
+    app.use('/_next/static/*', serveStatic({ root: webDir }))
+
+    app.use('/*', (c, next) => {
+      c.header('Cache-Control', 'public, max-age=0, must-revalidate')
+      return next()
+    })
+
+    app.use('/*', serveStatic({ root: webDir }))
+
+    app.notFound((c) => {
+      return c.html('Not found', 404)
+    })
+  }
 
   return app
 }
