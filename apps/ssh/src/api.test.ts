@@ -12,6 +12,7 @@ let app: ReturnType<typeof createApiServer>
 
 beforeAll(() => {
   app = createApiServer({
+    enableExec: true,
     execTimeout: 5000,
     docsDir,
     allowedOrigin: 'https://example.com',
@@ -124,6 +125,7 @@ describe('command cache', () => {
     cache.set(cwd, 'echo cached', { stdout: 'from-cache\n', stderr: '', exitCode: 0, env: {} })
 
     const cachedApp = createApiServer({
+      enableExec: true,
       execTimeout: 5000,
       docsDir,
       commandCache: cache,
@@ -149,6 +151,7 @@ describe('rate limiting', () => {
       limit: async () => ({ success: false, reset: Date.now() + 30_000 }),
     }
     const rlApp = createApiServer({
+      enableExec: true,
       execTimeout: 5000,
       docsDir,
       rateLimiter,
@@ -170,6 +173,7 @@ describe('rate limiting', () => {
       limit: async () => ({ success: true, reset: 0 }),
     }
     const rlApp = createApiServer({
+      enableExec: true,
       execTimeout: 5000,
       docsDir,
       rateLimiter,
@@ -193,6 +197,7 @@ describe('rate limiting', () => {
       },
     }
     const rlApp = createApiServer({
+      enableExec: true,
       execTimeout: 5000,
       docsDir,
       rateLimiter,
@@ -245,7 +250,7 @@ describe('static file serving', () => {
   })
 
   it('existing API routes still work with static serving enabled', async () => {
-    const staticApp = createApiServer({ execTimeout: 5000, docsDir, webDir })
+    const staticApp = createApiServer({ enableExec: true, execTimeout: 5000, docsDir, webDir })
     const res = await staticApp.request('/api/exec', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

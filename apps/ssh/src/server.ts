@@ -35,6 +35,7 @@ const COMMAND_CACHE_MAX_OUTPUT_BYTES = parseInt(
 )
 
 const WEB_DIR = process.env.WEB_DIR
+const ENABLE_EXEC_API = process.env.ENABLE_EXEC_API === 'true'
 
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
@@ -105,6 +106,7 @@ async function main() {
   })
 
   const apiApp = createApiServer({
+    enableExec: ENABLE_EXEC_API,
     execTimeout: EXEC_TIMEOUT,
     commandCache,
     rateLimiter,
