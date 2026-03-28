@@ -34,6 +34,8 @@ const COMMAND_CACHE_MAX_OUTPUT_BYTES = parseInt(
   10,
 )
 
+const WEB_DIR = process.env.WEB_DIR
+
 const SSH_HOST_KEY_PATH = resolve(process.env.SSH_HOST_KEY_PATH ?? './ssh_host_key')
 
 async function loadHostKey(): Promise<Buffer> {
@@ -107,10 +109,14 @@ async function main() {
     commandCache,
     rateLimiter,
     allowedOrigin: WEB_ORIGIN,
+    webDir: WEB_DIR,
   })
 
   const apiServer = serve({ fetch: apiApp.fetch, port: API_PORT }, (info) => {
     console.log(`API server listening on port ${info.port} (/api/exec)`)
+    if (WEB_DIR) {
+      console.log(`Serving static files from ${WEB_DIR}`)
+    }
   })
 
   async function gracefulShutdown(signal: string) {
