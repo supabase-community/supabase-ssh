@@ -178,6 +178,7 @@ export function createSSHServer(opts: SSHServerOptions) {
 
   const server = new Server(
     {
+      ident: `supabase-ssh_${process.env.VERSION ?? 'dev'}`,
       hostKeys: [hostKey],
       algorithms: {
         kex: [

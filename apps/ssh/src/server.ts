@@ -99,6 +99,7 @@ async function main() {
 
   const metricsApp = createMetricsServer({
     getActiveConnections: () => srv.activeConnectionCount,
+    version: process.env.VERSION ?? 'dev',
   })
 
   const httpServer = serve({ fetch: metricsApp.fetch, port: METRICS_PORT }, (info) => {

@@ -26,7 +26,9 @@ jobs:
           ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
       - run: mkdir -p apps/ssh/docs && curl -sL https://supabase.com/docs/docs.tar.gz | tar -xz -C apps/ssh/docs
       - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # v1
-      - run: flyctl deploy ../.. --config "$(pwd)/fly.toml"
+      - run: |
+          VERSION=${{ github.ref_name }}-$(git rev-parse --short HEAD)
+          flyctl deploy ../.. --config "$(pwd)/fly.toml" --build-arg VERSION="$VERSION"
         working-directory: apps/ssh
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
