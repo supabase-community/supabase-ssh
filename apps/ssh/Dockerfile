@@ -32,6 +32,8 @@ COPY apps/web/ ./apps/web/
 RUN pnpm --filter supabase-ssh-web run build
 
 FROM node:22-alpine3.22
+ARG VERSION=dev
+ENV VERSION=$VERSION
 WORKDIR /app
 
 COPY --from=builder /app/node_modules ./node_modules

@@ -27,9 +27,16 @@ export function createApiServer(opts: ApiServerOptions = {}) {
     webDir,
   } = opts
 
+  const version = process.env.VERSION ?? 'dev'
+
   const app = new Hono()
 
-  app.get('/healthz', (c) => c.json({ status: 'ok' }))
+  app.use('*', async (c, next) => {
+    await next()
+    c.header('X-Version', version)
+  })
+
+  app.get('/healthz', (c) => c.json({ status: 'ok', version }))
 
   if (enableExec) {
     app.use(

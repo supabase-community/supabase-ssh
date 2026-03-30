@@ -32,6 +32,7 @@ beforeAll(async () => {
   })
   metricsApp = createMetricsServer({
     getActiveConnections: () => srv.activeConnectionCount,
+    version: 'test',
   })
   port = await srv.listen()
 })

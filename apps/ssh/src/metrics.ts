@@ -5,6 +5,13 @@ const register = new Registry()
 
 collectDefaultMetrics({ register })
 
+const appInfo = new Gauge({
+  name: 'app_info',
+  help: 'Application version info',
+  labelNames: ['version'] as const,
+  registers: [register],
+})
+
 // --- Gauges (point-in-time) ---
 
 const activeConnections = new Gauge({
@@ -143,7 +150,9 @@ export function observeSessionDuration(seconds: number, mode: string, endReason:
 }
 
 /** Creates an internal HTTP server for /metrics and /healthz. */
-export function createMetricsServer(opts: { getActiveConnections: () => number }) {
+export function createMetricsServer(opts: { getActiveConnections: () => number; version: string }) {
+  appInfo.set({ version: opts.version }, 1)
+
   const app = new Hono()
 
   app.get('/metrics', async (c) => {
@@ -162,6 +171,7 @@ export function createMetricsServer(opts: { getActiveConnections: () => number }
   app.get('/healthz', (c) => {
     return c.json({
       status: 'ok',
+      version: opts.version,
       activeConnections: opts.getActiveConnections(),
       uptimeSeconds: Math.floor(process.uptime()),
     })
