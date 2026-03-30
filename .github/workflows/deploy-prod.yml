@@ -6,8 +6,7 @@ on:
       ref:
         description: Commit SHA, branch, or tag to deploy
         required: true
-  release:
-    types: [published]
+  workflow_call:
 
 jobs:
   deploy:
@@ -20,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # workflow_dispatch: uses inputs.ref; workflow_call: falls back to github.sha (the release commit)
           ref: ${{ inputs.ref || github.sha }}
       - run: mkdir -p apps/ssh/docs && curl -sL https://supabase.com/docs/docs.tar.gz | tar -xz -C apps/ssh/docs
       - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # v1
