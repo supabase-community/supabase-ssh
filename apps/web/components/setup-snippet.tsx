@@ -40,7 +40,7 @@ export function SetupSnippet() {
       </div>
 
       {/* Setup group with dotted border */}
-      <div className="border border-dashed border-[#3ecf8e] rounded-lg p-10 flex flex-col gap-4 max-w-lg mx-auto w-full mt-2">
+      <div className="border border-dashed border-[#3ecf8e] rounded-lg p-5 sm:p-10 flex flex-col gap-4 max-w-lg mx-auto w-full mt-2">
         <p className="text-center font-mono text-sm text-[#888] mb-6">
           Give{' '}
           <DropdownMenu>
