@@ -4,7 +4,7 @@ export function Hero() {
     <div className="flex flex-col items-center px-4 pt-10">
       {/* Title + tagline */}
       <section className="text-center">
-        <h1 className="text-4xl font-mono font-bold mb-4 flex items-baseline justify-center gap-4">
+        <h1 className="text-2xl sm:text-4xl font-mono font-bold mb-4 flex items-baseline justify-center gap-4">
           <span className="text-[#888]">$</span>
           <span className="text-white">ssh</span>
           <span className="text-[#3ecf8e]">supabase.sh</span>

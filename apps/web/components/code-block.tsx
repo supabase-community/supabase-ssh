@@ -25,7 +25,7 @@ export function CodeBlock({ copyText, children, variant = 'default' }: CodeBlock
     <button
       type="button"
       onClick={copy}
-      className={`w-full rounded-lg px-5 py-4 text-left font-mono text-sm transition-colors cursor-pointer relative group ${
+      className={`w-full rounded-lg px-5 py-4 pr-12 text-left font-mono text-xs sm:text-sm transition-colors cursor-pointer relative group ${
         variant === 'ghost'
           ? 'border border-[#333] hover:border-[#3ecf8e]'
           : 'bg-[#111] border border-[#333] hover:border-[#3ecf8e]'
