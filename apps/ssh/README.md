@@ -6,17 +6,15 @@ Commands run inside [just-bash](https://github.com/vercel-labs/just-bash) - a sa
 
 ## Local development
 
+From `apps/ssh/`:
+
 **1. Get the docs content:**
 
-Place built markdown docs in `/docs` at the repo root (or set `DOCS_DIR` to point elsewhere). In production, CI fetches these before building the Docker image.
-
-For local dev, you can copy them from a local supabase/supabase checkout:
-
 ```bash
-cp -r ../supabase/apps/docs/public/docs ./docs
+pnpm run setup:docs
 ```
 
-**2. Generate a host key** (from `apps/ssh/`):
+**2. Generate an SSH host key**:
 
 ```bash
 pnpm run generate:host-key:local
@@ -90,7 +88,7 @@ Create a Fly Redis (Upstash) database (one per environment, shared across instan
 
 ```bash
 fly redis create
-# Follow the prompts to name it (e.g. supabase-ssh-redis) and select a region
+# Follow the prompts to name it and select a region
 # Outputs the REST URL and token
 ```
 
@@ -102,7 +100,7 @@ fly secrets set UPSTASH_REDIS_REST_URL="<url>" UPSTASH_REDIS_REST_TOKEN="<token>
 
 Without these secrets, rate limiting is silently disabled. Per-instance connection limits still apply.
 
-Optionally tune the limits (defaults: 30 connections/IP per 60s window):
+Optionally tune the limits (e.g. 30 connections/IP per 60s window):
 
 ```bash
 fly secrets set RATE_LIMIT_MAX=30 RATE_LIMIT_WINDOW_SECONDS=60 --app <app>
@@ -126,12 +124,3 @@ RATE_LIMIT_WINDOW_SECONDS=10
 ssh localhost echo 1 && ssh localhost echo 2 && ssh localhost echo 3 && ssh localhost echo 4
 # 4th connection returns: "Too many connections. Retry in Xs."
 ```
-
-**Deploy:**
-
-```bash
-pnpm deploy:staging  # supabase-ssh-staging
-pnpm deploy:prod     # supabase-ssh
-```
-
-Docs content must be available at `../../docs` (or `DOCS_DIR`) before deploying.
