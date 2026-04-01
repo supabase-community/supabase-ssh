@@ -10,7 +10,11 @@ import {
 } from '@opentelemetry/api'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import { BasicTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import {
+  BasicTracerProvider,
+  BatchSpanProcessor,
+  TraceIdRatioBasedSampler,
+} from '@opentelemetry/sdk-trace-base'
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
 
 import pkg from '../package.json' with { type: 'json' }
@@ -57,7 +61,10 @@ export function initTelemetry(): void {
       })
     : new OTLPTraceExporter()
 
+  const sampleRate = parseFloat(process.env.OTEL_TRACE_SAMPLE_RATE ?? '1.0')
+
   provider = new BasicTracerProvider({
+    sampler: new TraceIdRatioBasedSampler(sampleRate),
     resource: resourceFromAttributes({
       [ATTR_SERVICE_NAME]: pkg.name,
       [ATTR_SERVICE_VERSION]: pkg.version,
