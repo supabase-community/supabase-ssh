@@ -2,6 +2,8 @@
 
 > Supabase docs over SSH
 
+![supabase-ssh-demo](https://github.com/user-attachments/assets/aa0f6cb1-1fa1-4d1f-8f9e-a6a04c1bb405)
+
 Give your agents shell access to Supabase documentation:
 
 ```bash
