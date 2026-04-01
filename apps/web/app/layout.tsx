@@ -12,6 +12,8 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+const OG_IMAGE = 'https://zhfonblqamxferhoguzj.supabase.co/functions/v1/generate-og?template=announcement&layout=vertical&copy=supabase.sh&icon=icon-CLI.svg'
+
 export const metadata: Metadata = {
   title: 'Supabase SSH',
   description: 'Browse Supabase docs over SSH.',
@@ -20,13 +22,15 @@ export const metadata: Metadata = {
     description: 'Browse Supabase docs over SSH.',
     siteName: 'Supabase SSH',
     type: 'website',
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: 'supabase.sh' }],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'Supabase SSH',
     description: 'Browse Supabase docs over SSH.',
     creator: '@supabase',
     site: '@supabase',
+    images: [OG_IMAGE],
   },
 }
 
