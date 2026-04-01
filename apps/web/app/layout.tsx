@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://supabase.sh'),
   title: 'Supabase SSH',
   description: 'Browse Supabase docs over SSH.',
   openGraph: {
