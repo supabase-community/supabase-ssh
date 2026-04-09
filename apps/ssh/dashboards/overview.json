@@ -66,6 +66,9 @@
           "legendFormat": "rejections"
         }
       ],
+      "options": {
+        "reduceOptions": { "calcs": ["max"] }
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -97,6 +100,9 @@
             ]
           }
         }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["max"] }
       }
     },
     {
@@ -111,6 +117,9 @@
           "legendFormat": "timeouts"
         }
       ],
+      "options": {
+        "reduceOptions": { "calcs": ["max"] }
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -139,6 +148,9 @@
           "legendFormat": "p99"
         }
       ],
+      "options": {
+        "reduceOptions": { "calcs": ["max"] }
+      },
       "fieldConfig": {
         "defaults": { "unit": "s" }
       }
