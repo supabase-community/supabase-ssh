@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.2](https://github.com/supabase-community/supabase-ssh/compare/v0.1.1...v0.1.2) (2026-04-09)
+
+
+### Features
+
+* **ssh:** otel sampling ([b1ea798](https://github.com/supabase-community/supabase-ssh/commit/b1ea79801bafc810df18d73cf276283368d40e07))
+* **ssh:** otel sampling ([2cdc391](https://github.com/supabase-community/supabase-ssh/commit/2cdc391939b9b8e976836f58bf46cfdf1eaeb5ad))
+
+
+### Bug Fixes
+
+* **ssh:** use max reducer on grafana overview stat panels ([7c7b266](https://github.com/supabase-community/supabase-ssh/commit/7c7b2663e807a6c932597c8e3861d1861d73f02b))
+* **ssh:** use max reducer on grafana overview stat panels ([e13ff49](https://github.com/supabase-community/supabase-ssh/commit/e13ff49100c91880b72ca985282e6bc78da3a6a0))
+
 ## [0.1.1](https://github.com/supabase-community/supabase-ssh/compare/v0.1.0...v0.1.1) (2026-03-30)
 
 
